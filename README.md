@@ -227,6 +227,17 @@ On Windows and Linux <kbd>Ctrl</kbd> takes the place of <kbd>⌘</kbd> and <kbd>
 <kbd>⌥</kbd>. Shortcuts the browser keeps for itself, such as <kbd>⌘⇧N</kbd>, are avoided on purpose.
 Typing the first letters of a name selects it.
 
+## Testing
+
+The package tests run on their own, with Orchestra Testbench and an in-memory SQLite database:
+
+```bash
+composer install
+composer test
+```
+
+The text recognition test is skipped where `tesseract` is not installed.
+
 ## License
 
 The MIT License (MIT). See [LICENSE](LICENSE.md) for more information.
