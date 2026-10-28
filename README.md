@@ -1,3 +1,9 @@
+<p align="center">
+  <a href="https://github.com/jonaaix/laravel-islands-filemanager">
+    <img src="https://raw.githubusercontent.com/jonaaix/laravel-islands-filemanager/main/laravel-islands-filemanager.svg" alt="Laravel Islands File Manager Logo" width="200">
+  </a>
+</p>
+
 <h1 align="center">Laravel Islands File Manager</h1>
 
 <p align="center">
