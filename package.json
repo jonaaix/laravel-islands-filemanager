@@ -1,0 +1,16 @@
+{
+    "name": "@aaix/laravel-islands-filemanager",
+    "version": "1.0.0",
+    "description": "A Finder-like file manager for Laravel Islands.",
+    "type": "module",
+    "license": "MIT",
+    "exports": {
+        ".": "./resources/js/index.js",
+        "./vite": "./vite.js"
+    },
+    "peerDependencies": {
+        "vue": "^3.4",
+        "@aaix/laravel-islands": "^1.0.30",
+        "@aaix/laravel-islands-datagrid": "^1.0"
+    }
+}
