@@ -11,7 +11,7 @@ use Illuminate\Console\Command;
 
 class ExtractFileTextCmd extends Command
 {
-    protected $signature = 'documents:extract-text {--all : Extract again for files that already have searchable text}';
+    protected $signature = 'filemanager:extract-text {--all : Extract again for files that already have searchable text}';
 
     protected $description = 'Make the text inside stored files searchable';
 

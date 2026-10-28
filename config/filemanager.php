@@ -40,10 +40,15 @@ return [
     ],
 
     /*
-    | Text inside PDFs and plain-text files is extracted after upload so search can find it.
-    | Needs the poppler tools (pdftotext, pdftoppm) on the server.
+    | Text inside files is extracted after upload so search can find it: PDFs (poppler tools
+    | pdftotext and pdftoppm), plain text, Word, Excel, PowerPoint and OpenDocument files. With
+    | tesseract installed, scanned PDFs and images are read by text recognition in these languages.
     */
     'extract_text' => true,
+
+    'ocr' => true,
+
+    'ocr_languages' => 'eng',
 
     'max_upload_kilobytes' => 512000,
 

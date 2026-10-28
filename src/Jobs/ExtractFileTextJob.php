@@ -13,9 +13,10 @@ class ExtractFileTextJob implements ShouldQueue
 {
     use Queueable;
 
-    public int $tries = 2;
+    public int $tries = 1;
 
-    public int $timeout = 180;
+    // Stays below the queue's retry_after (90s), or a slow text recognition would run twice.
+    public int $timeout = 85;
 
     public function __construct(public readonly int $fileId) {}
 
