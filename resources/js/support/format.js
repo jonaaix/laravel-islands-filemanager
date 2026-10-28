@@ -57,3 +57,25 @@ export function formatCurrency(amount, currency = 'EUR') {
 export function formatNumber(value) {
     return new Intl.NumberFormat(locale()).format(value);
 }
+
+const RECENT_DAYS = 2;
+
+export function formatDayAndTime(iso) {
+    if (!iso) {
+        return '';
+    }
+
+    const date = new Date(iso);
+    const today = new Date();
+    const startOf = (value) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+    const daysAgo = Math.round((startOf(today) - startOf(date)) / 86400000);
+    const time = new Intl.DateTimeFormat(locale(), { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
+
+    if (daysAgo >= 0 && daysAgo <= RECENT_DAYS) {
+        const day = new Intl.RelativeTimeFormat(locale(), { numeric: 'auto' }).format(-daysAgo, 'day');
+
+        return `${day.charAt(0).toLocaleUpperCase(locale()) + day.slice(1)}, ${time}`;
+    }
+
+    return `${new Intl.DateTimeFormat(locale(), { dateStyle: 'medium' }).format(date)}, ${time}`;
+}

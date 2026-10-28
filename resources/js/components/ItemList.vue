@@ -2,7 +2,7 @@
 import { ref } from 'vue';
 import { useTranslations } from '@aaix/laravel-islands/vue';
 import { Icon, IconButton, PersonChip } from '@aaix/laravel-islands/vue/helpers';
-import { formatDate, formatFileSize, formatRelative } from '../support/format.js';
+import { formatDayAndTime, formatFileSize } from '../support/format.js';
 import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, fileIcon, itemKey } from '../support/dragItems.js';
 import InlineName from './InlineName.vue';
@@ -60,7 +60,6 @@ function rowClass(item, isSelected) {
 }
 
 const cellTone = (isSelected) => (isSelected ? 'text-white' : 'text-gray-500 dark:text-gray-400');
-const dateTitle = (iso) => formatDate(iso, { timeStyle: 'short' });
 </script>
 
 <template>
@@ -144,8 +143,8 @@ const dateTitle = (iso) => formatDate(iso, { timeStyle: 'short' });
                         <PersonChip v-if="item.owner" :name="item.owner" :image="item.ownerAvatar" />
                         <template v-else>–</template>
                     </td>
-                    <td class="whitespace-nowrap px-3 py-1" :class="cellTone(selected.has(itemKey(item)))" :aria-label="dateTitle(item.updatedAt)">{{ formatRelative(item.updatedAt) }}</td>
-                    <td class="whitespace-nowrap px-3 py-1 tabular-nums" :class="cellTone(selected.has(itemKey(item)))">{{ formatDate(item.createdAt) }}</td>
+                    <td class="whitespace-nowrap px-3 py-1 tabular-nums" :class="cellTone(selected.has(itemKey(item)))">{{ formatDayAndTime(item.updatedAt) }}</td>
+                    <td class="whitespace-nowrap px-3 py-1 tabular-nums" :class="cellTone(selected.has(itemKey(item)))">{{ formatDayAndTime(item.createdAt) }}</td>
                     <td class="whitespace-nowrap px-3 py-1 text-right tabular-nums" :class="cellTone(selected.has(itemKey(item)))">
                         {{ item.type === 'folder' ? itemCount(t, item.itemCount) : formatFileSize(item.size) }}
                     </td>

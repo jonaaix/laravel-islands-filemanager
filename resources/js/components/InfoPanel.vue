@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { useTranslations } from '@aaix/laravel-islands/vue';
 import { Button, FieldCaption, Icon, IconButton, PersonChip, Skeleton, TextArea, useToast } from '@aaix/laravel-islands/vue/helpers';
 import { httpClient, sendJson } from '@aaix/laravel-islands-datagrid/vue';
-import { formatDate, formatFileSize, formatRelative } from '../support/format.js';
+import { formatDayAndTime, formatFileSize, formatRelative } from '../support/format.js';
 import { firstError } from '../support/http.js';
 import { itemCount } from '../support/counts.js';
 import { fileIcon } from '../support/dragItems.js';
@@ -178,14 +178,14 @@ function onCommentKey(event) {
                 <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
                     <template v-if="file">
                         <dt class="text-gray-500 dark:text-gray-400">{{ t('Uploaded') }}</dt>
-                        <dd class="text-gray-900 dark:text-white">{{ formatDate(file.createdAt, { timeStyle: 'short' }) }}</dd>
+                        <dd class="text-gray-900 dark:text-white">{{ formatDayAndTime(file.createdAt) }}</dd>
                         <template v-if="detail?.uploadedBy">
                             <dt class="text-gray-500 dark:text-gray-400">{{ t('By') }}</dt>
                             <dd><PersonChip :name="detail.uploadedBy" :image="single.ownerAvatar" /></dd>
                         </template>
                     </template>
                     <dt class="text-gray-500 dark:text-gray-400">{{ t('Modified') }}</dt>
-                    <dd class="text-gray-900 dark:text-white">{{ formatDate(single.updatedAt, { timeStyle: 'short' }) }}</dd>
+                    <dd class="text-gray-900 dark:text-white">{{ formatDayAndTime(single.updatedAt) }}</dd>
                     <dt class="text-gray-500 dark:text-gray-400">{{ t('Where') }}</dt>
                     <dd class="break-all text-gray-900 dark:text-white">{{ location }}</dd>
                 </dl>
