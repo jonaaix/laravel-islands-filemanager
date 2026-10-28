@@ -223,13 +223,67 @@ function updateHistoryButtons() {
 const goBack = () => history.back();
 const goForward = () => history.forward();
 
+const PREFETCH_LIMIT = 30;
+const folderCache = new Map();
+const inflight = new Map();
+const cacheKey = (folderId) => folderId ?? 'root';
+let requestedFolderId = props.initial.contents.folderId;
+
+folderCache.set(cacheKey(requestedFolderId), props.initial.contents);
+
+function fetchContents(folderId, { fresh = false } = {}) {
+    const key = cacheKey(folderId);
+
+    if (fresh) {
+        folderCache.delete(key);
+    }
+
+    if (!inflight.has(key)) {
+        const request = httpClient
+            .get(endpoints.contents, { params: folderId ? { folder: folderId } : {} })
+            .then(({ data }) => {
+                folderCache.set(key, data.data);
+
+                return data.data;
+            })
+            .finally(() => inflight.delete(key));
+
+        inflight.set(key, request);
+    }
+
+    return inflight.get(key);
+}
+
+function prefetchSubfolders(level) {
+    level.folders
+        .filter((folder) => !folderCache.has(folder.id))
+        .slice(0, PREFETCH_LIMIT)
+        .forEach((folder) => fetchContents(folder.id).catch(() => null));
+}
+
+function showContents(payload) {
+    contents.value = payload;
+    view.value = { ...payload.view };
+}
+
 async function load(folderId, { quiet = false } = {}) {
-    loading.value = !quiet;
+    const cached = folderCache.get(cacheKey(folderId));
+    requestedFolderId = folderId;
+
+    if (cached && !quiet) {
+        showContents(cached);
+    }
+
+    loading.value = !quiet && !cached;
 
     try {
-        const { data } = await httpClient.get(endpoints.contents, { params: folderId ? { folder: folderId } : {} });
-        contents.value = data.data;
-        view.value = { ...data.data.view };
+        const payload = await fetchContents(folderId, { fresh: true });
+
+        if (requestedFolderId === folderId) {
+            showContents(payload);
+        }
+
+        prefetchSubfolders(payload);
     } catch (error) {
         toast.danger(firstError(error, t('Could not load the folder')));
     } finally {
@@ -246,10 +300,14 @@ async function loadTree() {
     }
 }
 
-async function fetchChildren(folderId) {
-    const { data } = await httpClient.get(endpoints.contents, { params: { folder: folderId } });
+async function fetchChildren(folderId, options = {}) {
+    const payload = await fetchContents(folderId, options);
 
-    return { folders: data.data.folders, files: data.data.files };
+    return { folders: payload.folders, files: payload.files };
+}
+
+function showChildren(folderId, level) {
+    children.value = new Map(children.value).set(folderId, level);
 }
 
 async function expand(folder) {
@@ -257,12 +315,22 @@ async function expand(folder) {
         return;
     }
 
-    try {
-        const level = await fetchChildren(folder.id);
-        children.value = new Map(children.value).set(folder.id, level);
+    const cached = folderCache.get(folder.id);
+
+    if (cached) {
+        showChildren(folder.id, { folders: cached.folders, files: cached.files });
         expanded.value = new Set(expanded.value).add(folder.id);
+    }
+
+    try {
+        const level = await fetchChildren(folder.id, { fresh: Boolean(cached) });
+        showChildren(folder.id, level);
+        expanded.value = new Set(expanded.value).add(folder.id);
+        prefetchSubfolders(level);
     } catch (error) {
-        toast.danger(firstError(error, t('Could not load the folder')));
+        if (!cached) {
+            toast.danger(firstError(error, t('Could not load the folder')));
+        }
     }
 }
 
@@ -276,7 +344,7 @@ const toggleExpand = (folder) => (expanded.value.has(folder.id) ? collapse(folde
 
 async function reloadExpanded() {
     const ids = [...expanded.value];
-    const levels = await Promise.all(ids.map((id) => fetchChildren(id).catch(() => null)));
+    const levels = await Promise.all(ids.map((id) => fetchChildren(id, { fresh: true }).catch(() => null)));
     const nextChildren = new Map();
     const nextExpanded = new Set();
 
@@ -291,7 +359,11 @@ async function reloadExpanded() {
     expanded.value = nextExpanded;
 }
 
-const refresh = () => Promise.all([load(contents.value.folderId, { quiet: true }), loadTree(), reloadExpanded(), runSearch()]);
+function refresh() {
+    folderCache.clear();
+
+    return Promise.all([load(contents.value.folderId, { quiet: true }), loadTree(), reloadExpanded(), runSearch()]);
+}
 
 function openFolder(folderId, selectKey = null) {
     if (folderId === contents.value.folderId) {
@@ -921,6 +993,7 @@ function fitToViewport() {
 }
 
 onMounted(() => {
+    prefetchSubfolders(contents.value);
     fitToViewport();
     window.addEventListener('resize', fitToViewport);
     history.replaceState({ folder: contents.value.folderId, index: 0 }, '', window.location.href);

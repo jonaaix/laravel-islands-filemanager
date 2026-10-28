@@ -154,7 +154,7 @@ const dateTitle = (iso) => formatDate(iso, { timeStyle: 'short' });
                             :label="t('Actions')"
                             size="xs"
                             class="opacity-0 transition-opacity duration-500 ease-out focus-within:opacity-100 group-hover:opacity-100"
-                            :class="selected.has(itemKey(item)) ? '!text-white opacity-100' : ''"
+                            :class="selected.has(itemKey(item)) ? '!text-white opacity-100 hover:!bg-white/20 focus-visible:!bg-white/20' : ''"
                             @click.stop="emit('actions', $event, item)"
                             @dblclick.stop
                         >
