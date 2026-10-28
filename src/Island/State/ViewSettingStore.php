@@ -22,6 +22,10 @@ class ViewSettingStore
 
     private const int DEFAULT_TILE = 160;
 
+    private const string DEFAULT_SORT = 'added';
+
+    private const string DEFAULT_DIRECTION = 'desc';
+
     /**
      * @return array{mode: string, tileSize: int, sortBy: string, sortDirection: string}
      */
@@ -32,8 +36,8 @@ class ViewSettingStore
         return [
             'mode' => $setting->mode ?? 'list',
             'tileSize' => $setting->tile_size ?? self::DEFAULT_TILE,
-            'sortBy' => $setting->sort_by ?? 'name',
-            'sortDirection' => $setting->sort_direction ?? 'asc',
+            'sortBy' => $setting->sort_by ?? self::DEFAULT_SORT,
+            'sortDirection' => $setting->sort_direction ?? self::DEFAULT_DIRECTION,
         ];
     }
 

@@ -41,7 +41,9 @@ test('a folder lists its subfolders and files with the path leading to it', func
         ->assertJsonPath('data.folders.0.name', 'Contracts')
         ->assertJsonPath('data.files.0.name', 'price-list.pdf')
         ->assertJsonPath('data.files.0.owner', $user->name)
-        ->assertJsonPath('data.view.mode', 'list');
+        ->assertJsonPath('data.view.mode', 'list')
+        ->assertJsonPath('data.view.sortBy', 'added')
+        ->assertJsonPath('data.view.sortDirection', 'desc');
 
     $this->get(route('filemanager.index', ['folder' => $rundong->id]))->assertOk();
 });

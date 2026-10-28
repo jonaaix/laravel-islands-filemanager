@@ -55,8 +55,8 @@ return new class extends Migration
             $table->foreignId('folder_id')->nullable()->constrained(FileManager::table('folders'))->cascadeOnDelete();
             $table->string('mode', 10);
             $table->unsignedSmallInteger('tile_size');
-            $table->string('sort_by', 10)->default('name');
-            $table->string('sort_direction', 4)->default('asc');
+            $table->string('sort_by', 10)->default('added');
+            $table->string('sort_direction', 4)->default('desc');
             $table->timestamps();
             $table->index(['user_id', 'folder_id']);
         });

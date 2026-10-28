@@ -145,9 +145,33 @@ const rows = computed(() => {
 const items = computed(() => rows.value.map((row) => row.item));
 const rowByKey = computed(() => new Map(rows.value.map((row) => [itemKey(row.item), row])));
 
+const PREVIEW_PREFETCH_DELAY = 150;
+const PREVIEW_PREFETCH_MAX_BYTES = 30 * 1024 * 1024;
+const prefetchedPreviews = new Set();
+let previewTimer = null;
+
+function prefetchPreview(file) {
+    if (!file || (!file.isImage && !file.isPdf) || file.size > PREVIEW_PREFETCH_MAX_BYTES || prefetchedPreviews.has(file.url)) {
+        return;
+    }
+
+    prefetchedPreviews.add(file.url);
+
+    if (file.isImage) {
+        new Image().src = file.url;
+    } else {
+        fetch(file.url, { credentials: 'same-origin' }).catch(() => prefetchedPreviews.delete(file.url));
+    }
+}
+
 const selectedItems = computed(() => items.value.filter((item) => selected.value.has(itemKey(item))));
 const selectedSize = computed(() => selectedItems.value.reduce((sum, item) => sum + (item.type === 'file' ? item.size : 0), 0));
 const singleFile = computed(() => (selectedItems.value.length === 1 && selectedItems.value[0].type === 'file' ? selectedItems.value[0] : null));
+
+watch(singleFile, (file) => {
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => prefetchPreview(file), PREVIEW_PREFETCH_DELAY);
+});
 const folderName = computed(() => contents.value.path.at(-1)?.name ?? t('Files'));
 const location = computed(() => {
     const row = selectedItems.value.length === 1 ? rowByKey.value.get(itemKey(selectedItems.value[0])) : null;
