@@ -12,6 +12,7 @@ Route::put('preferences', [Controller::class, 'savePreferences'])->name('prefere
 
 Route::get('folders', [Controller::class, 'folders'])->name('folders.index');
 Route::post('folders', [Controller::class, 'storeFolder'])->name('folders.store');
+Route::post('folders/with-items', [Controller::class, 'storeFolderWithItems'])->name('folders.store-with-items');
 Route::put('folders/{folder}', [Controller::class, 'renameFolder'])->name('folders.rename');
 
 Route::put('items/move', [Controller::class, 'moveItems'])->name('items.move');

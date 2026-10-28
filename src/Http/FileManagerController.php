@@ -61,7 +61,7 @@ class FileManagerController extends Controller
         $user = $this->authorizeAccess($request);
 
         $validated = $request->validate([
-            'folder_id' => ['nullable', 'integer', Rule::exists('filemanager_folders', 'id')],
+            'folder_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')],
             'mode' => ['required', Rule::in(ViewSettingStore::MODES)],
             'tile_size' => ['required', 'integer', 'between:'.ViewSettingStore::MIN_TILE.','.ViewSettingStore::MAX_TILE],
             'sort_by' => ['required', Rule::in(ViewSettingStore::SORTS)],
@@ -107,10 +107,21 @@ class FileManagerController extends Controller
 
         $validated = $request->validate([
             'name' => ['nullable', 'string', 'max:255'],
-            'parent_id' => ['nullable', 'integer', Rule::exists('filemanager_folders', 'id')],
+            'parent_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')],
         ]);
 
         $folder = $writer->create($validated['name'] ?? null, $this->folderOrNull($validated['parent_id'] ?? null), $user);
+
+        return response()->json(['data' => ['folder' => $this->presenter->folder($folder)]]);
+    }
+
+    public function storeFolderWithItems(Request $request, ItemsWriter $writer): JsonResponse
+    {
+        $user = $this->authorizeAccess($request);
+        $validated = $request->validate(['parent_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')]]);
+        [$folders, $files] = $this->selectedItems($request);
+
+        $folder = $writer->moveIntoNewFolder($folders, $files, $this->folderOrNull($validated['parent_id'] ?? null), $user);
 
         return response()->json(['data' => ['folder' => $this->presenter->folder($folder)]]);
     }
@@ -164,7 +175,7 @@ class FileManagerController extends Controller
         $user = $this->authorizeAccess($request);
 
         $validated = $request->validate([
-            'folder_id' => ['nullable', 'integer', Rule::exists('filemanager_folders', 'id')],
+            'folder_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')],
             'files' => ['required', 'array', 'min:1', 'max:50'],
             'files.*' => ['file', 'max:'.config('filemanager.max_upload_kilobytes')],
         ]);
@@ -279,7 +290,7 @@ class FileManagerController extends Controller
 
     private function targetFolder(Request $request): ?Folder
     {
-        $validated = $request->validate(['target_id' => ['nullable', 'integer', Rule::exists('filemanager_folders', 'id')]]);
+        $validated = $request->validate(['target_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')]]);
 
         return $this->folderOrNull($validated['target_id'] ?? null);
     }

@@ -18,6 +18,13 @@ class FileManager
         return config('filemanager.user_model') ?? config('auth.providers.users.model');
     }
 
+    public static function avatarOf(?Model $user): ?string
+    {
+        $attribute = config('filemanager.user_avatar_attribute');
+
+        return $user !== null && $attribute !== null ? $user->getAttribute($attribute) : null;
+    }
+
     public static function allows(?Authenticatable $user): bool
     {
         $ability = config('filemanager.ability');

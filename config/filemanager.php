@@ -14,6 +14,12 @@ return [
     */
     'user_model' => null,
 
+    /*
+    | The attribute of the user model holding a profile picture URL, shown in the owner and author
+    | chips. Null shows the initial of the name instead.
+    */
+    'user_avatar_attribute' => null,
+
     'table_prefix' => 'filemanager_',
 
     /*

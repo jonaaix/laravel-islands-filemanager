@@ -16,7 +16,7 @@ import QuickLook from '../components/QuickLook.vue';
 import ShortcutsHelp from '../components/ShortcutsHelp.vue';
 import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, toPayload } from '../support/dragItems.js';
-import { KEYS, hasMod, isTyping } from '../support/shortcuts.js';
+import { KEYS, hasMod, isMac, isTyping } from '../support/shortcuts.js';
 import { sortItems } from '../support/sorting.js';
 
 // The Files window fills the whole content area, however wide the screen.
@@ -295,7 +295,7 @@ const refresh = () => Promise.all([load(contents.value.folderId, { quiet: true }
 
 function openFolder(folderId, selectKey = null) {
     if (folderId === contents.value.folderId) {
-        return;
+        return Promise.resolve();
     }
 
     query.value = '';
@@ -306,7 +306,8 @@ function openFolder(folderId, selectKey = null) {
     updateHistoryButtons();
     selected.value = new Set(selectKey ? [selectKey] : []);
     anchorKey.value = selectKey;
-    load(folderId);
+
+    return load(folderId);
 }
 
 function openItem(item) {
@@ -381,6 +382,35 @@ async function createFolder() {
         const { data } = await sendJson(endpoints.foldersStore, 'POST', { parent_id: contents.value.folderId });
         await refresh();
         const key = `folder-${data.data.folder.id}`;
+        select([key], key);
+        renameError.value = '';
+        renamingKey.value = key;
+        await nextTick();
+        scrollToKey(key);
+    } catch (error) {
+        toast.danger(firstError(error, t('Could not create the folder')));
+    }
+}
+
+async function createFolderWithItems(chosen) {
+    if (!chosen.length) {
+        return;
+    }
+
+    const parents = new Set(chosen.map((item) => rowByKey.value.get(itemKey(item))?.parentId ?? contents.value.folderId));
+    const parentId = parents.size === 1 ? [...parents][0] : contents.value.folderId;
+
+    try {
+        const { data } = await sendJson(endpoints.foldersStoreWithItems, 'POST', { ...toPayload(chosen), parent_id: parentId });
+        const key = `folder-${data.data.folder.id}`;
+        query.value = '';
+
+        if (parentId === contents.value.folderId || expanded.value.has(parentId)) {
+            await refresh();
+        } else {
+            await Promise.all([openFolder(parentId, key), loadTree()]);
+        }
+
         select([key], key);
         renameError.value = '';
         renamingKey.value = key;
@@ -639,6 +669,7 @@ function itemEntries(chosen) {
     }
 
     entries.push({ label: t('Move to…'), icon: 'o-arrows-right-left', action: () => startMove(chosen) });
+    entries.push({ label: chosen.length === 1 ? t('New folder with 1 item') : t('New folder with :count items', { count: chosen.length }), icon: 'o-folder-plus', shortcut: KEYS.newFolderWithItems, action: () => createFolderWithItems(chosen) });
     entries.push({ divider: true });
     entries.push({ label: single ? t('Delete') : t('Delete :count items', { count: chosen.length }), icon: 'o-trash', tone: 'danger', shortcut: KEYS.remove, action: () => remove(chosen) });
 
@@ -815,7 +846,12 @@ function onKeydown(event) {
     const mod = hasMod(event);
     const handled = () => event.preventDefault();
 
-    if (mod && event.altKey && event.code === 'KeyN') {
+    const newFolderWithItems = isMac ? event.metaKey && event.ctrlKey && event.code === 'KeyN' : event.ctrlKey && event.altKey && event.shiftKey && event.code === 'KeyN';
+
+    if (newFolderWithItems) {
+        handled();
+        createFolderWithItems(selectedItems.value);
+    } else if (mod && (event.shiftKey || event.altKey) && event.code === 'KeyN') {
         handled();
         createFolder();
     } else if (mod && event.altKey && event.code === 'KeyU') {

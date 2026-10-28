@@ -13,9 +13,9 @@ class FolderWriter
 {
     public function __construct(private readonly FolderTree $tree) {}
 
-    public function create(?string $name, ?Folder $parent, Authenticatable $user): Folder
+    public function create(?string $name, ?Folder $parent, Authenticatable $user, string $fallbackName = 'New folder'): Folder
     {
-        $name = filled($name) ? trim($name) : $this->tree->freeName(__('New folder'), $parent?->id);
+        $name = filled($name) ? trim($name) : $this->tree->freeName(__($fallbackName), $parent?->id);
         $this->ensureNameIsFree($name, $parent?->id);
 
         return Folder::query()->create(['name' => $name, 'parent_id' => $parent?->id, 'created_by_id' => $user->getAuthIdentifier()]);

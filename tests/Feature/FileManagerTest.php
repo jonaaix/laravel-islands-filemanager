@@ -295,3 +295,30 @@ test('the page hosts the file manager island, and without an ability every signe
     $this->get(route('filemanager.index'))->assertOk();
     $this->getJson(route('filemanager.contents'))->assertOk();
 });
+
+test('selected items move into a new folder created beside them', function () {
+    $this->actingAs($this->member());
+    $suppliers = Folder::query()->create(['name' => 'Suppliers']);
+    $rundong = Folder::query()->create(['name' => 'Rundong', 'parent_id' => $suppliers->id]);
+    $file = uploadDocument($suppliers, 'price-list.pdf');
+
+    $response = $this->postJson(route('filemanager.folders.store-with-items'), ['folders' => [$rundong->id], 'files' => [$file->id], 'parent_id' => $suppliers->id])
+        ->assertOk()
+        ->assertJsonPath('data.folder.name', 'New folder with items');
+
+    $created = Folder::query()->findOrFail($response->json('data.folder.id'));
+
+    expect($created->parent_id)->toBe($suppliers->id)
+        ->and($rundong->refresh()->parent_id)->toBe($created->id)
+        ->and($file->refresh()->folder_id)->toBe($created->id);
+});
+
+test('owners carry their profile picture when the app names the attribute', function () {
+    config(['filemanager.user_avatar_attribute' => 'email']);
+    $this->actingAs($owner = $this->member());
+    uploadDocument(null);
+
+    $this->getJson(route('filemanager.contents'))
+        ->assertJsonPath('data.files.0.owner', $owner->name)
+        ->assertJsonPath('data.files.0.ownerAvatar', $owner->email);
+});

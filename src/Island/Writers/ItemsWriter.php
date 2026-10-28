@@ -7,6 +7,7 @@ namespace Aaix\LaravelIslandsFilemanager\Island\Writers;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Aaix\LaravelIslandsFilemanager\Services\FolderTree;
+use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -26,6 +27,20 @@ class ItemsWriter
         DB::transaction(function () use ($folders, $files, $target): void {
             $folders->each(fn (Folder $folder) => $this->folders->move($folder, $target));
             $files->each(fn (File $file) => $file->update(['folder_id' => $target?->id]));
+        });
+    }
+
+    /**
+     * @param  Collection<int, Folder>  $folders
+     * @param  Collection<int, File>  $files
+     */
+    public function moveIntoNewFolder(Collection $folders, Collection $files, ?Folder $parent, Authenticatable $user): Folder
+    {
+        return DB::transaction(function () use ($folders, $files, $parent, $user): Folder {
+            $folder = $this->folders->create(null, $parent, $user, 'New folder with items');
+            $this->move($folders, $files, $folder);
+
+            return $folder;
         });
     }
 

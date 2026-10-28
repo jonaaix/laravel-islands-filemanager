@@ -31,7 +31,7 @@ class FolderContentsQuery
             'path' => array_map(fn (Folder $step): array => ['id' => $step->id, 'name' => $step->name], $this->tree->ancestry($folder)),
             'folders' => Folder::query()
                 ->where('parent_id', $folder?->id)
-                ->with('createdBy:id,name')
+                ->with('createdBy')
                 ->withCount(['children', 'files'])
                 ->orderBy('name')
                 ->get()
@@ -39,7 +39,7 @@ class FolderContentsQuery
                 ->all(),
             'files' => File::query()
                 ->where('folder_id', $folder?->id)
-                ->with('uploadedBy:id,name')
+                ->with('uploadedBy')
                 ->withCount('comments')
                 ->orderBy('name')
                 ->get()
@@ -84,7 +84,7 @@ class FolderContentsQuery
             return $steps;
         };
 
-        $folderQuery = Folder::query()->with('createdBy:id,name')->withCount(['children', 'files']);
+        $folderQuery = Folder::query()->with('createdBy')->withCount(['children', 'files']);
         $this->matcher->whereFoldersMatch($folderQuery, $terms);
         $folders = $folderQuery
             ->when($scope, fn ($query) => $query->whereIn('parent_id', $scope))
@@ -95,7 +95,7 @@ class FolderContentsQuery
             ->map(fn (Folder $folder): array => [...$this->presenter->folder($folder), 'parentId' => $folder->parent_id, 'path' => $path($folder->parent_id)])
             ->all();
 
-        $fileQuery = File::query()->with('uploadedBy:id,name')->withCount('comments');
+        $fileQuery = File::query()->with('uploadedBy')->withCount('comments');
         $this->matcher->whereFilesMatch($fileQuery, $terms, withContent: false);
         $files = $fileQuery
             ->when($scope, fn ($query) => $query->whereIn('folder_id', $scope))
@@ -105,7 +105,7 @@ class FolderContentsQuery
             ->map(fn (File $file): array => [...$this->presenter->file($file), 'parentId' => $file->folder_id, 'path' => $path($file->folder_id)])
             ->all();
 
-        $contentQuery = File::query()->with(['uploadedBy:id,name', 'content'])->withCount('comments');
+        $contentQuery = File::query()->with(['uploadedBy', 'content'])->withCount('comments');
         $this->matcher->whereFilesMatch($contentQuery, $terms, withContent: true);
         $contentFiles = $contentQuery
             ->has('content')

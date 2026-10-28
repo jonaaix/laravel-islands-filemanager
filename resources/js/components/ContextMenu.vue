@@ -9,7 +9,7 @@ const props = defineProps({
 
 const emit = defineEmits(['close']);
 
-const MENU_WIDTH = 248;
+const MENU_WIDTH = 272;
 
 // As wide as the menu, so every placement rule of the popover lands the menu's left edge on the pointer.
 const anchor = computed(() => (props.position ? { getBoundingClientRect: () => new DOMRect(props.position.alignRight ? props.position.x - MENU_WIDTH : props.position.x, props.position.y, MENU_WIDTH, 0) } : null));

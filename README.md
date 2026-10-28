@@ -23,7 +23,7 @@ lives in the database, while every file is stored in a directory of its own.
 
 - **Window** — folder tree, content, info column and status line; tree and info column resize and remember their width per user
 - **Views** — a list (name, owner, modified, added, size) with in-place folder expansion, or thumbnails with a size slider; view, size and sort order are remembered per user and folder
-- **Finder interaction** — click, ⌘/Ctrl- and Shift-selection, context menus, inline rename, drag and drop to move, Quick Look on <kbd>Space</kbd>
+- **Finder interaction** — click, ⌘/Ctrl- and Shift-selection, context menus, inline rename, drag and drop to move, a new folder from the selection, Quick Look on <kbd>Space</kbd>
 - **Upload** — drop files from the desktop onto the window or straight onto a folder
 - **Notes and comments** — one notes field and a comment thread per file
 - **Search** — through the open folder and everything below it, several words at once, matches by name kept apart from matches inside files
@@ -196,6 +196,7 @@ disk.
 | --- | --- | --- |
 | `ability` | `filemanager.access` | Gate ability guarding everything; `null` for every signed-in user |
 | `user_model` | auth provider model | owner of files, folders and comments; its `name` is shown |
+| `user_avatar_attribute` | `null` | attribute with a profile picture URL for the owner and author chips; `null` shows the initial |
 | `table_prefix` | `filemanager_` | prefix of the package's tables |
 | `disk` | `local` | storage disk for files and thumbnails |
 | `hash_salt` | `FILEMANAGER_HASH_SALT` | salt for the storage directories |
@@ -217,14 +218,16 @@ disk.
 | Quick Look | <kbd>Space</kbd> |
 | Rename | <kbd>Enter</kbd> |
 | Delete | <kbd>⌘⌫</kbd> or <kbd>Delete</kbd> |
-| New folder | <kbd>⌘⌥N</kbd> |
+| New folder | <kbd>⌘⇧N</kbd> or <kbd>⌘⌥N</kbd> |
+| New folder with the selection | <kbd>⌃⌘N</kbd> (<kbd>Ctrl Alt Shift N</kbd> on Windows and Linux) |
 | Upload files | <kbd>⌘⌥U</kbd> |
 | List / thumbnails | <kbd>⌥1</kbd> / <kbd>⌥2</kbd> |
 | Search in the folder | <kbd>/</kbd> |
 | Shortcut overview | <kbd>?</kbd> |
 
 On Windows and Linux <kbd>Ctrl</kbd> takes the place of <kbd>⌘</kbd> and <kbd>Alt</kbd> that of
-<kbd>⌥</kbd>. Shortcuts the browser keeps for itself, such as <kbd>⌘⇧N</kbd>, are avoided on purpose.
+<kbd>⌥</kbd>. Browsers that keep a shortcut for themselves win — Chrome opens a private window on <kbd>⌘⇧N</kbd> —
+which is why new folder also answers to <kbd>⌘⌥N</kbd>.
 Typing the first letters of a name selects it.
 
 ## Testing

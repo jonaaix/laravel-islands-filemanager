@@ -48,6 +48,7 @@ class FileManagerProps
                 'preferences' => FileManager::route('preferences'),
                 'folders' => FileManager::route('folders.index'),
                 'foldersStore' => FileManager::route('folders.store'),
+                'foldersStoreWithItems' => FileManager::route('folders.store-with-items'),
                 'foldersRename' => $route('folders.rename', 'folder'),
                 'itemsMove' => FileManager::route('items.move'),
                 'itemsDestroy' => FileManager::route('items.destroy'),

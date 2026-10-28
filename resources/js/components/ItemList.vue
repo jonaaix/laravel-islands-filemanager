@@ -1,7 +1,7 @@
 <script setup>
 import { ref } from 'vue';
 import { useTranslations } from '@aaix/laravel-islands/vue';
-import { Icon, IconButton } from '@aaix/laravel-islands/vue/helpers';
+import { Icon, IconButton, PersonChip } from '@aaix/laravel-islands/vue/helpers';
 import { formatDate, formatFileSize, formatRelative } from '../support/format.js';
 import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, fileIcon, itemKey } from '../support/dragItems.js';
@@ -140,7 +140,10 @@ const dateTitle = (iso) => formatDate(iso, { timeStyle: 'short' });
                             </span>
                         </span>
                     </td>
-                    <td class="whitespace-nowrap px-3 py-1" :class="cellTone(selected.has(itemKey(item)))">{{ item.owner ?? '–' }}</td>
+                    <td class="whitespace-nowrap px-3 py-1" :class="cellTone(selected.has(itemKey(item)))">
+                        <PersonChip v-if="item.owner" :name="item.owner" :image="item.ownerAvatar" />
+                        <template v-else>–</template>
+                    </td>
                     <td class="whitespace-nowrap px-3 py-1" :class="cellTone(selected.has(itemKey(item)))" :aria-label="dateTitle(item.updatedAt)">{{ formatRelative(item.updatedAt) }}</td>
                     <td class="whitespace-nowrap px-3 py-1 tabular-nums" :class="cellTone(selected.has(itemKey(item)))">{{ formatDate(item.createdAt) }}</td>
                     <td class="whitespace-nowrap px-3 py-1 text-right tabular-nums" :class="cellTone(selected.has(itemKey(item)))">

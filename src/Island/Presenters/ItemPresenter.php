@@ -23,6 +23,7 @@ class ItemPresenter
             'name' => $folder->name,
             'itemCount' => (int) ($folder->children_count ?? 0) + (int) ($folder->files_count ?? 0),
             'owner' => $folder->createdBy?->name,
+            'ownerAvatar' => FileManager::avatarOf($folder->createdBy),
             'createdAt' => $folder->created_at?->toIso8601String(),
             'updatedAt' => $folder->updated_at?->toIso8601String(),
         ];
@@ -50,6 +51,7 @@ class ItemPresenter
             'hasNotes' => filled($file->notes),
             'commentCount' => (int) ($file->comments_count ?? 0),
             'owner' => $file->uploadedBy?->name,
+            'ownerAvatar' => FileManager::avatarOf($file->uploadedBy),
             'createdAt' => $file->created_at?->toIso8601String(),
             'updatedAt' => $file->updated_at?->toIso8601String(),
         ];
@@ -71,6 +73,7 @@ class ItemPresenter
                 'id' => $comment->id,
                 'body' => $comment->body,
                 'author' => $comment->user?->name ?? __('Deleted user'),
+                'authorAvatar' => FileManager::avatarOf($comment->user),
                 'createdAt' => $comment->created_at?->toIso8601String(),
                 'canDelete' => $comment->user_id === $viewer->getAuthIdentifier(),
             ])->all(),

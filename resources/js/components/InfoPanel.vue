@@ -1,7 +1,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue';
 import { useTranslations } from '@aaix/laravel-islands/vue';
-import { Button, FieldCaption, Icon, IconButton, Skeleton, TextArea, useToast } from '@aaix/laravel-islands/vue/helpers';
+import { Button, FieldCaption, Icon, IconButton, PersonChip, Skeleton, TextArea, useToast } from '@aaix/laravel-islands/vue/helpers';
 import { httpClient, sendJson } from '@aaix/laravel-islands-datagrid/vue';
 import { formatDate, formatFileSize, formatRelative } from '../support/format.js';
 import { firstError } from '../support/http.js';
@@ -181,7 +181,7 @@ function onCommentKey(event) {
                         <dd class="text-gray-900 dark:text-white">{{ formatDate(file.createdAt, { timeStyle: 'short' }) }}</dd>
                         <template v-if="detail?.uploadedBy">
                             <dt class="text-gray-500 dark:text-gray-400">{{ t('By') }}</dt>
-                            <dd class="text-gray-900 dark:text-white">{{ detail.uploadedBy }}</dd>
+                            <dd><PersonChip :name="detail.uploadedBy" :image="single.ownerAvatar" /></dd>
                         </template>
                     </template>
                     <dt class="text-gray-500 dark:text-gray-400">{{ t('Modified') }}</dt>
@@ -209,7 +209,7 @@ function onCommentKey(event) {
                             <li v-for="entry in detail.comments" :key="entry.id" class="group space-y-0.5">
                                 <div class="flex items-center justify-between gap-2">
                                     <div class="text-xs">
-                                        <span class="font-semibold text-gray-900 dark:text-white">{{ entry.author }}</span>
+                                        <PersonChip :name="entry.author" :image="entry.authorAvatar" />
                                         <span class="text-gray-500 dark:text-gray-400"> · {{ formatRelative(entry.createdAt) }}</span>
                                     </div>
                                     <IconButton v-if="entry.canDelete" :label="t('Delete comment')" size="xs" class="opacity-0 transition-opacity duration-500 ease-out focus-within:opacity-100 group-hover:opacity-100" @click="deleteComment(entry)">
