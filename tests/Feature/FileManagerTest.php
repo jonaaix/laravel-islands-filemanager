@@ -428,3 +428,25 @@ test('a volume can be read-only for some users and moving between volumes can be
     $this->postJson(route('filemanager.items.copy'), ['folders' => [$folder->id], 'target_volume' => 'archive'])->assertForbidden();
     $this->postJson(route('filemanager.items.copy'), ['folders' => [$folder->id], 'target_volume' => 'files'])->assertOk();
 });
+
+test('open tabs are remembered per user, without tabs that can no longer be opened', function () {
+    $this->actingAs($this->member());
+    $invoices = Folder::query()->create(['name' => 'Invoices']);
+    $gone = Folder::query()->create(['name' => 'Gone']);
+
+    $this->putJson(route('filemanager.preferences'), [
+        'tabs' => [
+            ['volume' => 'files', 'folder_id' => null],
+            ['volume' => 'files', 'folder_id' => $invoices->id],
+            ['volume' => 'files', 'folder_id' => $gone->id],
+            ['volume' => 'nowhere', 'folder_id' => null],
+        ],
+        'active_tab' => 1,
+    ])->assertOk();
+
+    $gone->delete();
+
+    $this->get(route('filemanager.index'))->assertOk()
+        ->assertSee('&quot;tabs&quot;:[{&quot;volume&quot;:&quot;files&quot;,&quot;folderId&quot;:null},{&quot;volume&quot;:&quot;files&quot;,&quot;folderId&quot;:'.$invoices->id.'}]', false)
+        ->assertSee('&quot;activeTab&quot;:1', false);
+});

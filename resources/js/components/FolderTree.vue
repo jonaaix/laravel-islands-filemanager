@@ -13,7 +13,7 @@ const props = defineProps({
     renamingId: { type: Number, default: null },
 });
 
-const emit = defineEmits(['open', 'drop', 'contextmenu', 'rename-save', 'rename-cancel']);
+const emit = defineEmits(['open', 'open-tab', 'drop', 'contextmenu', 'rename-save', 'rename-cancel']);
 const { t } = useTranslations();
 const expanded = ref(new Set());
 const hovered = ref(null);
@@ -91,6 +91,7 @@ const rowClass = (volume, id) => [
                 :class="rowClass(volume.key, folder.id)"
                 :style="{ paddingLeft: `${22 + folder.depth * 14}px` }"
                 @click="emit('open', folder.id, volume.key)"
+                @mousedown.middle.prevent="emit('open-tab', folder.id, volume.key)"
                 @contextmenu.prevent.stop="emit('contextmenu', $event, folder)"
                 @dragover="over($event, volume.key, folder.id)"
                 @dragleave="hovered = null"

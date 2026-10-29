@@ -80,11 +80,23 @@ class FileManagerController extends Controller
         $user = $this->authorizeAccess($request);
 
         $validated = $request->validate([
-            'info_width' => ['required_without:tree_width', 'integer', 'between:'.PreferenceStore::MIN_INFO_WIDTH.','.PreferenceStore::MAX_INFO_WIDTH],
-            'tree_width' => ['required_without:info_width', 'integer', 'between:'.PreferenceStore::MIN_TREE_WIDTH.','.PreferenceStore::MAX_TREE_WIDTH],
+            'info_width' => ['sometimes', 'integer', 'between:'.PreferenceStore::MIN_INFO_WIDTH.','.PreferenceStore::MAX_INFO_WIDTH],
+            'tree_width' => ['sometimes', 'integer', 'between:'.PreferenceStore::MIN_TREE_WIDTH.','.PreferenceStore::MAX_TREE_WIDTH],
+            'tabs' => ['sometimes', 'array', 'min:1', 'max:'.PreferenceStore::MAX_TABS],
+            'tabs.*.volume' => ['required', 'string', 'max:64'],
+            'tabs.*.folder_id' => ['nullable', 'integer'],
+            'active_tab' => ['required_with:tabs', 'integer', 'min:0'],
         ]);
 
-        $preferences->saveWidths($user, $validated);
+        if (isset($validated['tabs'])) {
+            $preferences->saveTabs($user, array_values($validated['tabs']), $validated['active_tab']);
+        }
+
+        $widths = array_intersect_key($validated, array_flip(['info_width', 'tree_width']));
+
+        if ($widths !== []) {
+            $preferences->saveWidths($user, $widths);
+        }
 
         return response()->json(['data' => ['saved' => true]]);
     }

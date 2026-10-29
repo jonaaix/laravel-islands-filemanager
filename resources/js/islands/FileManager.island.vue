@@ -14,6 +14,7 @@ import MoveModal from '../components/MoveModal.vue';
 import PaneResizer from '../components/PaneResizer.vue';
 import QuickLook from '../components/QuickLook.vue';
 import ShortcutsHelp from '../components/ShortcutsHelp.vue';
+import TabBar from '../components/TabBar.vue';
 import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, toPayload } from '../support/dragItems.js';
 import { collectDroppedFiles, fromFileInput, takeDroppedEntries } from '../support/droppedFiles.js';
@@ -46,6 +47,77 @@ const volumeName = (key) => volumes.value.find((volume) => volume.key === key)?.
 const canWriteTo = (key) => volumes.value.find((volume) => volume.key === key)?.canWrite ?? false;
 const canWrite = computed(() => contents.value.canWrite);
 const clipboard = ref(null);
+
+// ----- Tabs -----
+
+const startLocation = { volume: props.initial.contents.volume, folderId: props.initial.contents.folderId };
+const savedTabs = props.preferences.tabs;
+const tabs = ref(savedTabs.length ? savedTabs.map((tab) => ({ ...tab })) : [startLocation]);
+const activeTab = ref(savedTabs.length ? props.preferences.activeTab : 0);
+let tabsTimer = null;
+
+tabs.value[activeTab.value] = { ...startLocation };
+
+const tabLabel = (tab) => (tab.folderId ? (allFolders.value.find((folder) => folder.id === tab.folderId)?.name ?? '…') : volumeName(tab.volume));
+
+function saveTabs() {
+    clearTimeout(tabsTimer);
+    tabsTimer = setTimeout(() => {
+        sendJson(endpoints.preferences, 'PUT', {
+            tabs: tabs.value.map((tab) => ({ volume: tab.volume, folder_id: tab.folderId })),
+            active_tab: activeTab.value,
+        }).catch(() => null);
+    }, 400);
+}
+
+function rememberActiveTab() {
+    const current = tabs.value[activeTab.value];
+
+    if (current && (current.volume !== currentVolume.value || current.folderId !== contents.value.folderId)) {
+        tabs.value[activeTab.value] = { volume: currentVolume.value, folderId: contents.value.folderId };
+        saveTabs();
+    }
+}
+
+function openTab(location = { volume: currentVolume.value, folderId: contents.value.folderId }) {
+    tabs.value.push({ ...location });
+    activeTab.value = tabs.value.length - 1;
+    saveTabs();
+    openFolder(location.folderId, null, location.volume);
+}
+
+function switchTab(index) {
+    if (index === activeTab.value) {
+        return;
+    }
+
+    activeTab.value = index;
+    saveTabs();
+    openFolder(tabs.value[index].folderId, null, tabs.value[index].volume);
+}
+
+function closeTab(index) {
+    if (tabs.value.length === 1) {
+        return;
+    }
+
+    const wasActive = index === activeTab.value;
+    tabs.value.splice(index, 1);
+
+    if (wasActive) {
+        activeTab.value = Math.min(index, tabs.value.length - 1);
+        openFolder(tabs.value[activeTab.value].folderId, null, tabs.value[activeTab.value].volume);
+    } else if (index < activeTab.value) {
+        activeTab.value--;
+    }
+
+    saveTabs();
+}
+
+function dropOnTab(event, index) {
+    const tab = tabs.value[index];
+    dropOn(event, tab.folderId, tab.volume);
+}
 const view = ref({ ...props.initial.contents.view });
 const loading = ref(false);
 const uploading = ref(false);
@@ -177,6 +249,8 @@ function prefetchPreview(file) {
 const selectedItems = computed(() => items.value.filter((item) => selected.value.has(itemKey(item))));
 const selectedSize = computed(() => selectedItems.value.reduce((sum, item) => sum + (item.type === 'file' ? item.size : 0), 0));
 const singleFile = computed(() => (selectedItems.value.length === 1 && selectedItems.value[0].type === 'file' ? selectedItems.value[0] : null));
+
+watch(() => [contents.value.volume, contents.value.folderId], rememberActiveTab);
 
 watch(singleFile, (file) => {
     clearTimeout(previewTimer);
@@ -865,6 +939,7 @@ function itemEntries(chosen) {
 
     if (single?.type === 'folder') {
         entries.push({ label: t('Open'), icon: 'o-folder-open', shortcut: KEYS.open, action: () => openItem(single) });
+        entries.push({ label: t('Open in new tab'), icon: 'o-square-2-stack', action: () => openTab({ volume: currentVolume.value, folderId: single.id }) });
     } else if (single) {
         entries.push({ label: t('Preview'), icon: 'o-eye', shortcut: KEYS.quickLook, action: () => openItem(single) });
         entries.push({ label: t('Download'), icon: 'o-arrow-down-tray', action: () => downloadEach([single]) });
@@ -913,7 +988,8 @@ function backgroundEntries() {
         : [];
     return withPasteGroup(contents.value.folderId, currentVolume.value, [
         ...writing,
-        ...(writing.length ? [{ divider: true }] : []),
+        { label: t('New tab'), icon: 'o-square-2-stack', shortcut: KEYS.newTab, action: () => openTab() },
+        { divider: true },
         { label: t('View as list'), checked: view.value.mode === 'list', shortcut: KEYS.list, action: () => setMode('list') },
         { label: t('View as thumbnails'), checked: view.value.mode === 'grid', shortcut: KEYS.grid, action: () => setMode('grid') },
         { divider: true },
@@ -953,6 +1029,7 @@ function onTreeContextMenu(event, folder) {
         position: { x: event.clientX, y: event.clientY },
         entries: withPasteGroup(folder.id, volumeOf(folder.id), [
             { label: t('Open'), icon: 'o-folder-open', action: () => openFolder(folder.id) },
+            { label: t('Open in new tab'), icon: 'o-square-2-stack', action: () => openTab({ volume: volumeOf(folder.id), folderId: folder.id }) },
             { label: t('Download as ZIP'), icon: 'o-archive-box-arrow-down', action: () => downloadZip([item]) },
             { divider: true },
             { label: t('Copy'), icon: 'o-document-duplicate', action: () => copyToClipboard([item]) },
@@ -1086,6 +1163,20 @@ function onKeydown(event) {
     const newFolderWithItems = isMac ? event.metaKey && event.ctrlKey && event.code === 'KeyN' : event.ctrlKey && event.altKey && event.shiftKey && event.code === 'KeyN';
 
     const hasTextSelection = Boolean(window.getSelection()?.toString());
+
+    if (event.altKey && !mod && event.code === 'KeyT') {
+        handled();
+        openTab();
+
+        return;
+    }
+
+    if (event.altKey && !mod && event.code === 'KeyW') {
+        handled();
+        closeTab(activeTab.value);
+
+        return;
+    }
 
     if (mod && event.code === 'KeyC' && !event.altKey && !event.shiftKey && !hasTextSelection) {
         handled();
@@ -1251,6 +1342,8 @@ function onFileChanged(file) {
                 </label>
             </div>
 
+            <TabBar v-if="tabs.length > 1" :tabs="tabs" :active="activeTab" :label-of="tabLabel" @select="switchTab" @close="closeTab" @add="openTab()" @drop="dropOnTab" />
+
             <div class="flex min-h-0 flex-1">
                 <aside class="relative hidden shrink-0 border-r border-gray-200 bg-gray-50/70 lg:block dark:border-white/10 dark:bg-white/[0.02]" :style="{ width: `${shownTreeWidth}px` }">
                     <div class="h-full overflow-y-auto">
@@ -1261,6 +1354,7 @@ function onFileChanged(file) {
                             :path="contents.path"
                             :renaming-id="treeRenamingId"
                             @open="(folderId, volume) => openFolder(folderId, null, volume)"
+                            @open-tab="(folderId, volume) => openTab({ volume, folderId })"
                             @drop="dropOn"
                             @contextmenu="onTreeContextMenu"
                             @rename-save="saveTreeRename"
@@ -1319,6 +1413,7 @@ function onFileChanged(file) {
                         :sort-direction="view.sortDirection"
                         @select="onItemClick"
                         @open="openItem"
+                        @open-tab="(item) => openTab({ volume: currentVolume, folderId: item.id })"
                         @toggle="toggleExpand"
                         @contextmenu="onItemContextMenu"
                         @actions="onItemActions"
@@ -1339,6 +1434,7 @@ function onFileChanged(file) {
                         :search-term="searching ? query.trim() : ''"
                         @select="onItemClick"
                         @open="openItem"
+                        @open-tab="(item) => openTab({ volume: currentVolume, folderId: item.id })"
                         @contextmenu="onItemContextMenu"
                         @dragstart="onItemDragStart"
                         @drop="dropOn"

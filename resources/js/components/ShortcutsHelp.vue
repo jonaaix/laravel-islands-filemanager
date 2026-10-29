@@ -23,6 +23,8 @@ const rows = computed(() => [
     [t('Delete'), KEYS.remove],
     [t('New folder'), `${KEYS.newFolder} · ${KEYS.newFolderFallback}`],
     [t('New folder with the selection'), KEYS.newFolderWithItems],
+    [t('New tab / close tab'), `${KEYS.newTab} / ${KEYS.closeTab}`],
+    [t('Open a folder in a new tab'), t('Middle-click')],
     [t('Copy'), KEYS.copy],
     [t('Paste a copy'), KEYS.paste],
     [t('Move here'), KEYS.moveHere],

@@ -65,7 +65,7 @@ class FileManagerProps
                 'o-folder', 'o-folder-plus', 'o-folder-open', 'o-document', 'o-document-text', 'o-photo', 'o-arrow-up-tray', 'o-arrow-down-tray',
                 'o-pencil-square', 'o-trash', 'o-arrows-right-left', 'o-chat-bubble-left', 'o-chevron-right', 'o-chevron-left', 'o-chevron-down',
                 'o-chevron-up', 'o-x-mark', 'o-home', 'o-arrow-top-right-on-square', 'o-paper-airplane', 'o-eye', 'o-archive-box-arrow-down',
-                'o-question-mark-circle', 'o-magnifying-glass', 'o-information-circle', 'o-ellipsis-horizontal', 'o-folder-arrow-down', 'o-server-stack', 'o-document-duplicate', 'o-clipboard-document',
+                'o-question-mark-circle', 'o-magnifying-glass', 'o-information-circle', 'o-ellipsis-horizontal', 'o-folder-arrow-down', 'o-server-stack', 'o-document-duplicate', 'o-clipboard-document', 'o-plus', 'o-square-2-stack',
             ]),
         ];
     }

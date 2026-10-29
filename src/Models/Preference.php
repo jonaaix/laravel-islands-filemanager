@@ -21,6 +21,8 @@ class Preference extends Model
         return [
             'info_width' => 'integer',
             'tree_width' => 'integer',
+            'tabs' => 'array',
+            'active_tab' => 'integer',
         ];
     }
 }

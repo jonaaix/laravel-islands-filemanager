@@ -14,6 +14,8 @@ export const KEYS = {
     newFolderFallback: `${MOD}${ALT}N`,
     newFolderWithItems: isMac ? '⌃⌘N' : 'Ctrl+Alt+Shift+N',
     upload: `${MOD}${ALT}U`,
+    newTab: `${ALT}T`,
+    closeTab: `${ALT}W`,
     copy: `${MOD}C`,
     paste: `${MOD}V`,
     moveHere: `${MOD}${ALT}V`,

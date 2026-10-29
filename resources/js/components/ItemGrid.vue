@@ -16,7 +16,7 @@ const props = defineProps({
     tileSize: { type: Number, required: true },
 });
 
-const emit = defineEmits(['select', 'open', 'contextmenu', 'dragstart', 'drop', 'rename-save', 'rename-cancel']);
+const emit = defineEmits(['select', 'open', 'open-tab', 'contextmenu', 'dragstart', 'drop', 'rename-save', 'rename-cancel']);
 const { t } = useTranslations();
 const hoveredFolder = ref(null);
 
@@ -55,6 +55,7 @@ function drop(event, item) {
                 :class="item.type === 'folder' && hoveredFolder === item.id ? 'bg-primary-50 ring-2 ring-primary-500 dark:bg-primary-500/10' : ''"
                 @click.stop="emit('select', $event, item)"
                 @dblclick.stop="emit('open', item)"
+                @mousedown.middle.prevent="item.type === 'folder' && emit('open-tab', item)"
                 @contextmenu.prevent.stop="emit('contextmenu', $event, item)"
                 @dragstart="emit('dragstart', $event, item)"
                 @dragover="over($event, item)"

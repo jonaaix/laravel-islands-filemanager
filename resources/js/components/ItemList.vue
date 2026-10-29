@@ -22,7 +22,7 @@ defineProps({
     sortDirection: { type: String, required: true },
 });
 
-const emit = defineEmits(['select', 'open', 'toggle', 'contextmenu', 'actions', 'dragstart', 'drop', 'rename-save', 'rename-cancel', 'sort']);
+const emit = defineEmits(['select', 'open', 'open-tab', 'toggle', 'contextmenu', 'actions', 'dragstart', 'drop', 'rename-save', 'rename-cancel', 'sort']);
 const { t } = useTranslations();
 const hoveredFolder = ref(null);
 
@@ -95,6 +95,7 @@ const cellTone = (isSelected) => (isSelected ? 'text-white' : 'text-gray-500 dar
                     :class="rowClass(item, selected.has(itemKey(item)))"
                     @click.stop="emit('select', $event, item)"
                     @dblclick.stop="emit('open', item)"
+                @mousedown.middle.prevent="item.type === 'folder' && emit('open-tab', item)"
                     @contextmenu.prevent.stop="emit('contextmenu', $event, item)"
                     @dragstart="emit('dragstart', $event, item)"
                     @dragover="over($event, item)"

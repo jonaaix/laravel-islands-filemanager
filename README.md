@@ -17,8 +17,8 @@ A file manager for <a href="https://github.com/jonaaix/laravel-islands">Laravel 
 
 ---
 
-A file manager as one Laravel Islands page: folder tree, list and thumbnail views, notes and
-comments, previews, keyboard shortcuts, folder uploads and full-text search — including Office
+A file manager as one Laravel Islands page: several drives, tabs, folder tree, list and thumbnail
+views, notes and comments, previews, keyboard shortcuts, copy and paste, folder uploads and full-text search — including Office
 files and scanned documents.
 
 ## Requirements
