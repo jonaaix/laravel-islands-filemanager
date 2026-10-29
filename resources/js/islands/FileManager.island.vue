@@ -1480,7 +1480,7 @@ function onFileChanged(file) {
                 >
                     <div
                         v-if="marqueeBox"
-                        class="pointer-events-none absolute z-10 rounded-sm border border-primary-500 bg-primary-500/10"
+                        class="pointer-events-none absolute z-10 rounded-sm border border-white/90 bg-primary-500/10 ring-1 ring-primary-600 dark:border-zinc-900/90 dark:ring-primary-400"
                         :style="{ left: `${marqueeBox.left}px`, top: `${marqueeBox.top}px`, width: `${marqueeBox.width}px`, height: `${marqueeBox.height}px` }"
                     ></div>
 
