@@ -324,3 +324,25 @@ test('owners carry their profile picture when the app names the attribute', func
         ->assertJsonPath('data.files.0.owner', $owner->name)
         ->assertJsonPath('data.files.0.ownerAvatar', $owner->email);
 });
+
+test('a dropped folder keeps its structure and merges into folders of the same name', function () {
+    $this->actingAs($this->member());
+    $existing = Folder::query()->create(['name' => 'Supplier XY']);
+
+    $this->postJson(route('filemanager.files.store'), [
+        'files' => [
+            UploadedFile::fake()->create('offer.pdf', 10, 'application/pdf'),
+            UploadedFile::fake()->create('drawing.pdf', 10, 'application/pdf'),
+            UploadedFile::fake()->create('loose.pdf', 10, 'application/pdf'),
+        ],
+        'paths' => ['Supplier XY', '../Supplier XY/Drawings', ''],
+    ])->assertOk();
+
+    $drawings = Folder::query()->where('name', 'Drawings')->sole();
+
+    expect(Folder::query()->where('name', 'Supplier XY')->count())->toBe(1)
+        ->and($drawings->parent_id)->toBe($existing->id)
+        ->and(File::query()->where('name', 'offer.pdf')->sole()->folder_id)->toBe($existing->id)
+        ->and(File::query()->where('name', 'drawing.pdf')->sole()->folder_id)->toBe($drawings->id)
+        ->and(File::query()->where('name', 'loose.pdf')->sole()->folder_id)->toBeNull();
+});

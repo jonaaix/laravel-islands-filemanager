@@ -15,6 +15,7 @@ use Aaix\LaravelIslandsFilemanager\Models\Comment;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Aaix\LaravelIslandsFilemanager\Services\FileStore;
+use Aaix\LaravelIslandsFilemanager\Services\FolderPathResolver;
 use Aaix\LaravelIslandsFilemanager\Services\ZipBuilder;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\JsonResponse;
@@ -170,7 +171,7 @@ class FileManagerController extends Controller
 
     // ----- Files -----
 
-    public function storeFiles(Request $request, FileStore $store): JsonResponse
+    public function storeFiles(Request $request, FileStore $store, FolderPathResolver $folders): JsonResponse
     {
         $user = $this->authorizeAccess($request);
 
@@ -178,12 +179,14 @@ class FileManagerController extends Controller
             'folder_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')],
             'files' => ['required', 'array', 'min:1', 'max:50'],
             'files.*' => ['file', 'max:'.config('filemanager.max_upload_kilobytes')],
+            'paths' => ['array'],
+            'paths.*' => ['nullable', 'string', 'max:1000'],
         ]);
 
         $folder = $this->folderOrNull($validated['folder_id'] ?? null);
 
-        foreach ($validated['files'] as $upload) {
-            $store->store($upload, $folder, $user);
+        foreach ($validated['files'] as $index => $upload) {
+            $store->store($upload, $folders->resolve($folder, $validated['paths'][$index] ?? '', $user), $user);
         }
 
         return response()->json(['data' => ['uploaded' => count($validated['files'])]]);

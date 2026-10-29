@@ -24,7 +24,7 @@ lives in the database, while every file is stored in a directory of its own.
 - **Window** — folder tree, content, info column and status line; tree and info column resize and remember their width per user
 - **Views** — a list (name, owner, modified, added, size) with in-place folder expansion, or thumbnails with a size slider; view, size and sort order are remembered per user and folder
 - **Finder interaction** — click, ⌘/Ctrl- and Shift-selection, context menus, inline rename, drag and drop to move, a new folder from the selection, Quick Look on <kbd>Space</kbd>
-- **Upload** — drop files from the desktop onto the window or straight onto a folder
+- **Upload** — drop files or whole folders from the desktop onto the window or straight onto a folder; the folder structure is rebuilt
 - **Notes and comments** — one notes field and a comment thread per file
 - **Search** — through the open folder and everything below it, several words at once, matches by name kept apart from matches inside files
 - **Full text** — PDFs, plain text, Word, Excel, PowerPoint and OpenDocument files; scanned PDFs and images through text recognition

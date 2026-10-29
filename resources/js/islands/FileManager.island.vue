@@ -16,6 +16,7 @@ import QuickLook from '../components/QuickLook.vue';
 import ShortcutsHelp from '../components/ShortcutsHelp.vue';
 import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, toPayload } from '../support/dragItems.js';
+import { collectDroppedFiles, fromFileInput, takeDroppedEntries } from '../support/droppedFiles.js';
 import { KEYS, hasMod, isMac, isTyping } from '../support/shortcuts.js';
 import { sortItems } from '../support/sorting.js';
 
@@ -41,6 +42,8 @@ const tree = ref(props.initial.tree);
 const view = ref({ ...props.initial.contents.view });
 const loading = ref(false);
 const uploading = ref(false);
+const uploadProgress = ref(null);
+const folderInput = ref(null);
 const query = ref('');
 const searchField = ref(null);
 const contentPane = ref(null);
@@ -640,35 +643,52 @@ function chooseUpload(targetId = contents.value.folderId) {
     fileInput.value.click();
 }
 
+function chooseFolderUpload(targetId = contents.value.folderId) {
+    uploadTargetId = targetId;
+    folderInput.value.click();
+}
+
 function onFilesChosen(event) {
-    upload(Array.from(event.target.files ?? []), uploadTargetId === undefined ? contents.value.folderId : uploadTargetId);
+    upload(fromFileInput(event.target.files ?? []), uploadTargetId === undefined ? contents.value.folderId : uploadTargetId);
     uploadTargetId = undefined;
     event.target.value = '';
 }
 
-async function upload(files, targetId) {
-    if (!files.length) {
+const UPLOAD_BATCH = 20;
+
+async function upload(entries, targetId) {
+    if (!entries.length) {
         return;
     }
 
-    const form = new FormData();
-    files.forEach((file) => form.append('files[]', file));
-
-    if (targetId) {
-        form.append('folder_id', targetId);
-    }
-
     uploading.value = true;
+    uploadProgress.value = { done: 0, total: entries.length };
 
     try {
-        await sendForm(endpoints.filesStore, form);
+        for (let start = 0; start < entries.length; start += UPLOAD_BATCH) {
+            const batch = entries.slice(start, start + UPLOAD_BATCH);
+            const form = new FormData();
+            batch.forEach(({ file, path }) => {
+                form.append('files[]', file);
+                form.append('paths[]', path);
+            });
+
+            if (targetId) {
+                form.append('folder_id', targetId);
+            }
+
+            await sendForm(endpoints.filesStore, form);
+            uploadProgress.value = { done: start + batch.length, total: entries.length };
+        }
+
         const into = targetId === contents.value.folderId ? null : (tree.value.find((folder) => folder.id === targetId)?.name ?? t('Files'));
-        toast.success(into ? t(':count files uploaded into :folder', { count: files.length, folder: into }) : t(':count files uploaded', { count: files.length }));
-        await refresh();
+        toast.success(into ? t(':count files uploaded into :folder', { count: entries.length, folder: into }) : t(':count files uploaded', { count: entries.length }));
     } catch (error) {
         toast.danger(firstError(error, t('Could not upload the files')));
     } finally {
         uploading.value = false;
+        uploadProgress.value = null;
+        await refresh();
     }
 }
 
@@ -698,7 +718,9 @@ async function dropOn(event, folderId) {
             toast.danger(firstError(error, t('Could not move the items')));
         }
     } else if (carriesFiles(event)) {
-        upload(Array.from(event.dataTransfer.files), folderId);
+        const entries = takeDroppedEntries(event.dataTransfer);
+        const files = Array.from(event.dataTransfer.files);
+        upload(await collectDroppedFiles(entries, files), folderId);
     }
 }
 
@@ -778,6 +800,7 @@ function backgroundEntries() {
     return [
         { label: t('New folder'), icon: 'o-folder-plus', shortcut: KEYS.newFolder, action: createFolder },
         { label: t('Upload files…'), icon: 'o-arrow-up-tray', shortcut: KEYS.upload, action: () => chooseUpload() },
+        { label: t('Upload folder…'), icon: 'o-folder-arrow-down', action: () => chooseFolderUpload() },
         { divider: true },
         { label: t('View as list'), checked: view.value.mode === 'list', shortcut: KEYS.list, action: () => setMode('list') },
         { label: t('View as thumbnails'), checked: view.value.mode === 'grid', shortcut: KEYS.grid, action: () => setMode('grid') },
@@ -1227,7 +1250,7 @@ function onFileChanged(file) {
                     <template v-if="selectedSize"> · {{ formatFileSize(selectedSize) }}</template>
                 </span>
                 <span class="flex items-center gap-3">
-                    <span v-if="uploading">{{ t('Uploading…') }}</span>
+                    <span v-if="uploading" class="tabular-nums">{{ uploadProgress ? t('Uploading :done of :total', uploadProgress) : t('Uploading…') }}</span>
                     <button type="button" class="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white" @click="helpOpen = true">
                         <Icon name="o-question-mark-circle" class="h-3.5 w-3.5" />
                         {{ t('Keyboard shortcuts') }}
@@ -1237,6 +1260,7 @@ function onFileChanged(file) {
         </section>
 
         <input ref="fileInput" type="file" multiple class="hidden" @change="onFilesChosen" />
+        <input ref="folderInput" type="file" webkitdirectory class="hidden" @change="onFilesChosen" />
 
         <ContextMenu :position="menu?.position ?? null" :entries="menu?.entries ?? []" @close="menu = null" />
         <MoveModal :open="moving.length > 0" :items="moving" :folders-url="endpoints.folders" :error="moveError" :busy="busy" @close="moving = []" @submit="submitMove" />
