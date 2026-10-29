@@ -48,7 +48,8 @@ const volumeName = (key) => volumes.value.find((volume) => volume.key === key)?.
 const canWriteTo = (key) => volumes.value.find((volume) => volume.key === key)?.canWrite ?? false;
 const canWrite = computed(() => contents.value.canWrite);
 const clipboard = ref(null);
-const trashVolume = ref(null);
+const trashOpen = ref(false);
+const writableVolumes = computed(() => volumes.value.filter((volume) => volume.canWrite).map((volume) => volume.key));
 const trashCount = ref(0);
 
 // ----- Tabs -----
@@ -302,7 +303,7 @@ function clearSelection() {
 }
 
 const { box: marqueeBox, start: startMarquee, consumeClick: marqueeConsumedClick } = useMarquee(contentPane, {
-    canStart: () => !trashVolume.value && !renamingKey.value && !loading.value,
+    canStart: () => !trashOpen.value && !renamingKey.value && !loading.value,
     currentKeys: () => [...selected.value],
     onChange: (keys, anchor) => select(keys, anchor ?? anchorKey.value),
 });
@@ -488,11 +489,11 @@ function refresh() {
 }
 
 function openFolder(folderId, selectKey = null, volume = volumeOf(folderId)) {
-    if (folderId === contents.value.folderId && volume === currentVolume.value && !trashVolume.value) {
+    if (folderId === contents.value.folderId && volume === currentVolume.value && !trashOpen.value) {
         return Promise.resolve();
     }
 
-    trashVolume.value = null;
+    trashOpen.value = null;
     query.value = '';
     expanded.value = new Set();
     historyIndex++;
@@ -530,31 +531,22 @@ function onPopState(event) {
     expanded.value = new Set();
     selected.value = new Set();
 
-    if (state.trash) {
-        showTrash(state.volume);
-    } else {
-        trashVolume.value = null;
+    trashOpen.value = Boolean(state.trash);
+
+    if (!state.trash) {
         load(state.volume ?? volumes.value[0]?.key, state.folder ?? null);
     }
 }
 
-function trashUrl(volume) {
-    const url = new URL(pageUrl(volume, null));
+function trashUrl() {
+    const url = new URL(props.pageUrl, window.location.origin);
     url.searchParams.set('trash', '1');
 
     return url.toString();
 }
 
-function showTrash(volume) {
-    trashVolume.value = volume;
-
-    if (volume !== currentVolume.value || contents.value.folderId !== null) {
-        load(volume, null, { quiet: true });
-    }
-}
-
-function openTrash(volume = currentVolume.value) {
-    if (trashVolume.value === volume) {
+function openTrash() {
+    if (trashOpen.value) {
         return;
     }
 
@@ -562,9 +554,9 @@ function openTrash(volume = currentVolume.value) {
     clearSelection();
     historyIndex++;
     historyMax = historyIndex;
-    history.pushState({ volume, trash: true, index: historyIndex }, '', trashUrl(volume));
+    history.pushState({ volume: currentVolume.value, folder: contents.value.folderId, trash: true, index: historyIndex }, '', trashUrl());
     updateHistoryButtons();
-    showTrash(volume);
+    trashOpen.value = true;
 }
 
 // ----- View -----
@@ -762,8 +754,8 @@ async function remove(removedItems) {
     }
 }
 
-function dropOnTrash(event, volume) {
-    if (!carriesItems(event) || volume !== currentVolume.value) {
+function dropOnTrash(event) {
+    if (!carriesItems(event)) {
         return;
     }
 
@@ -1215,7 +1207,7 @@ function jumpToName(character) {
 }
 
 function onKeydown(event) {
-    if (trashVolume.value || menu.value || helpOpen.value || moving.value.length || renamingKey.value || treeRenamingId.value) {
+    if (trashOpen.value || menu.value || helpOpen.value || moving.value.length || renamingKey.value || treeRenamingId.value) {
         return;
     }
 
@@ -1340,12 +1332,8 @@ onMounted(() => {
     prefetchSubfolders(contents.value);
     fitToViewport();
     window.addEventListener('resize', fitToViewport);
-    const startsInTrash = new URL(window.location.href).searchParams.has('trash') && canWrite.value;
-    history.replaceState({ volume: currentVolume.value, folder: contents.value.folderId, trash: startsInTrash, index: 0 }, '', window.location.href);
-
-    if (startsInTrash) {
-        showTrash(currentVolume.value);
-    }
+    trashOpen.value = new URL(window.location.href).searchParams.has('trash') && writableVolumes.value.length > 0;
+    history.replaceState({ volume: currentVolume.value, folder: contents.value.folderId, trash: trashOpen.value, index: 0 }, '', window.location.href);
     window.addEventListener('popstate', onPopState);
     window.addEventListener('keydown', onKeydown);
 
@@ -1385,20 +1373,20 @@ function onFileChanged(file) {
 
                 <nav class="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto text-sm" :aria-label="t('Folder path')">
                     <button
+                        v-if="!trashOpen"
                         type="button"
                         class="inline-flex h-7 shrink-0 items-center rounded-md px-2 hover:bg-gray-100 dark:hover:bg-white/5"
-                        :class="contents.path.length || trashVolume ? 'text-gray-600 dark:text-gray-300' : 'font-semibold text-gray-900 dark:text-white'"
+                        :class="contents.path.length ? 'text-gray-600 dark:text-gray-300' : 'font-semibold text-gray-900 dark:text-white'"
                         @click="openFolder(null, null, currentVolume)"
                         @dragover="allowDrop"
                         @drop.prevent="dropOn($event, null, currentVolume)"
                     >
                         {{ volumeName(currentVolume) }}
                     </button>
-                    <template v-if="trashVolume">
-                        <Icon name="o-chevron-right" class="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                    <template v-if="trashOpen">
                         <span class="inline-flex h-7 shrink-0 items-center px-2 font-semibold text-gray-900 dark:text-white">{{ t('Trash') }}</span>
                     </template>
-                    <template v-for="(step, index) in trashVolume ? [] : contents.path" :key="step.id">
+                    <template v-for="(step, index) in trashOpen ? [] : contents.path" :key="step.id">
                         <Icon name="o-chevron-right" class="h-3.5 w-3.5 shrink-0 text-gray-400" />
                         <button
                             type="button"
@@ -1413,7 +1401,7 @@ function onFileChanged(file) {
                     </template>
                 </nav>
 
-                <template v-if="!trashVolume">
+                <template v-if="!trashOpen">
                 <div class="hidden w-28 md:block" :class="view.mode === 'grid' ? '' : 'invisible'">
                     <Slider v-model="view.tileSize" :min="props.tileSize.min" :max="props.tileSize.max" :step="8" :aria-label="t('Thumbnail size')" @commit="saveView" />
                 </div>
@@ -1442,7 +1430,7 @@ function onFileChanged(file) {
                             :current-id="contents.folderId"
                             :path="contents.path"
                             :renaming-id="treeRenamingId"
-                            :trash-volume="trashVolume"
+                            :trash-open="trashOpen"
                             @open="(folderId, volume) => openFolder(folderId, null, volume)"
                             @open-tab="(folderId, volume) => openTab({ volume, folderId })"
                             @drop="dropOn"
@@ -1472,11 +1460,11 @@ function onFileChanged(file) {
                     :class="filesOver ? 'bg-primary-50/50 ring-2 ring-inset ring-primary-500 dark:bg-primary-500/10' : ''"
                     @mousedown="startMarquee"
                     @click="marqueeConsumedClick() || clearSelection()"
-                    @contextmenu.prevent="trashVolume || onBackgroundContextMenu($event)"
-                    @dragenter="trashVolume || onPaneDragEnter($event)"
-                    @dragleave="trashVolume || onPaneDragLeave($event)"
-                    @dragover="trashVolume || onPaneDragOver($event)"
-                    @drop="trashVolume || onPaneDrop($event)"
+                    @contextmenu.prevent="trashOpen || onBackgroundContextMenu($event)"
+                    @dragenter="trashOpen || onPaneDragEnter($event)"
+                    @dragleave="trashOpen || onPaneDragLeave($event)"
+                    @dragover="trashOpen || onPaneDragOver($event)"
+                    @drop="trashOpen || onPaneDrop($event)"
                 >
                     <div
                         v-if="marqueeBox"
@@ -1485,8 +1473,8 @@ function onFileChanged(file) {
                     ></div>
 
                     <TrashView
-                        v-if="trashVolume"
-                        :volume="trashVolume"
+                        v-if="trashOpen"
+                        :volumes="writableVolumes"
                         :endpoints="endpoints"
                         @restored="onTrashRestored"
                         @count="trashCount = $event"
@@ -1550,7 +1538,7 @@ function onFileChanged(file) {
                     />
                 </div>
 
-                <aside v-if="!trashVolume" class="relative hidden shrink-0 border-l border-gray-200 xl:block dark:border-white/10" :style="{ width: `${shownInfoWidth}px` }">
+                <aside v-if="!trashOpen" class="relative hidden shrink-0 border-l border-gray-200 xl:block dark:border-white/10" :style="{ width: `${shownInfoWidth}px` }">
                     <PaneResizer
                         :model-value="shownInfoWidth"
                         :min="limits.info.min"
@@ -1578,7 +1566,7 @@ function onFileChanged(file) {
 
             <div class="flex h-7 shrink-0 items-center justify-between gap-3 border-t border-gray-200 px-3 text-xs tabular-nums text-gray-500 dark:border-white/10 dark:text-gray-400">
                 <span>
-                    <template v-if="trashVolume">{{ itemCount(t, trashCount) }}</template>
+                    <template v-if="trashOpen">{{ itemCount(t, trashCount) }}</template>
                     <template v-else-if="selectedItems.length">{{ t(':selected of :count selected', { selected: selectedItems.length, count: items.length }) }}</template>
                     <template v-else>{{ itemCount(t, items.length) }}</template>
                     <template v-if="selectedSize"> · {{ formatFileSize(selectedSize) }}</template>

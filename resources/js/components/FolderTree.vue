@@ -11,7 +11,7 @@ const props = defineProps({
     currentId: { type: Number, default: null },
     path: { type: Array, required: true },
     renamingId: { type: Number, default: null },
-    trashVolume: { type: String, default: null },
+    trashOpen: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['open', 'open-tab', 'drop', 'contextmenu', 'rename-save', 'rename-cancel', 'open-trash', 'drop-trash']);
@@ -61,23 +61,25 @@ function drop(event, volume, id) {
     emit('drop', event, id, volume);
 }
 
-function overTrash(event, volume) {
-    if (carriesItems(event) && volume === props.currentVolume) {
+const hasWritableVolume = computed(() => props.volumes.some((volume) => volume.canWrite));
+
+function overTrash(event) {
+    if (carriesItems(event)) {
         event.preventDefault();
         event.stopPropagation();
-        hovered.value = `${volume}:trash`;
+        hovered.value = 'trash';
     }
 }
 
-function dropOnTrash(event, volume) {
+function dropOnTrash(event) {
     hovered.value = null;
-    emit('drop-trash', event, volume);
+    emit('drop-trash', event);
 }
 
 const rowClass = (volume, id) => [
     'flex min-h-7 w-full cursor-default select-none items-center gap-1.5 rounded-md pr-2 text-left text-sm',
     hovered.value === targetKey(volume, id) ? 'bg-primary-50 ring-2 ring-inset ring-primary-500 dark:bg-primary-500/10' : '',
-    props.trashVolume === null && props.currentVolume === volume && props.currentId === id ? 'bg-gray-200/70 font-medium text-gray-900 dark:bg-white/10 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5',
+    !props.trashOpen && props.currentVolume === volume && props.currentId === id ? 'bg-gray-200/70 font-medium text-gray-900 dark:bg-white/10 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5',
 ];
 </script>
 
@@ -125,23 +127,23 @@ const rowClass = (volume, id) => [
                 <InlineName v-if="renamingId === folder.id" :value="folder.name" @save="emit('rename-save', folder, $event)" @cancel="emit('rename-cancel')" />
                 <span v-else class="min-w-0 break-words py-1">{{ folder.name }}</span>
             </div>
-            <button
-                v-if="volume.canWrite"
-                type="button"
-                class="flex min-h-7 w-full cursor-default select-none items-center gap-1.5 rounded-md pl-2 pr-2 text-left text-sm"
-                :class="[
-                    hovered === `${volume.key}:trash` ? 'bg-primary-50 ring-2 ring-inset ring-primary-500 dark:bg-primary-500/10' : '',
-                    trashVolume === volume.key ? 'bg-gray-200/70 font-medium text-gray-900 dark:bg-white/10 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5',
-                ]"
-                @click="emit('open-trash', volume.key)"
-                @contextmenu.prevent.stop
-                @dragover="overTrash($event, volume.key)"
-                @dragleave="hovered = null"
-                @drop.stop.prevent="dropOnTrash($event, volume.key)"
-            >
-                <Icon name="o-trash" class="h-4 w-4 shrink-0 text-gray-400" />
-                <span class="break-words">{{ t('Trash') }}</span>
-            </button>
         </div>
+        <button
+            v-if="hasWritableVolume"
+            type="button"
+            class="flex min-h-7 w-full cursor-default select-none items-center gap-1.5 rounded-md pl-2 pr-2 text-left text-sm"
+            :class="[
+                hovered === 'trash' ? 'bg-primary-50 ring-2 ring-inset ring-primary-500 dark:bg-primary-500/10' : '',
+                trashOpen ? 'bg-gray-200/70 font-medium text-gray-900 dark:bg-white/10 dark:text-white' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5',
+            ]"
+            @click="emit('open-trash')"
+            @contextmenu.prevent.stop
+            @dragover="overTrash"
+            @dragleave="hovered = null"
+            @drop.stop.prevent="dropOnTrash"
+        >
+            <Icon name="o-trash" class="h-4 w-4 shrink-0 text-gray-400" />
+            <span class="break-words">{{ t('Trash') }}</span>
+        </button>
     </nav>
 </template>

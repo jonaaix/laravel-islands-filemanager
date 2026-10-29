@@ -10,7 +10,7 @@ import { hasMod, isTyping } from '../support/shortcuts.js';
 import ContextMenu from './ContextMenu.vue';
 
 const props = defineProps({
-    volume: { type: String, required: true },
+    volumes: { type: Array, required: true },
     endpoints: { type: Object, required: true },
 });
 
@@ -35,9 +35,9 @@ async function load() {
     failed.value = false;
 
     try {
-        const { data } = await httpClient.get(props.endpoints.trash, { params: { volume: props.volume } });
-        entries.value = data.data.entries;
-        retentionDays.value = data.data.retentionDays;
+        const responses = await Promise.all(props.volumes.map((volume) => httpClient.get(props.endpoints.trash, { params: { volume } })));
+        entries.value = responses.flatMap(({ data }) => data.data.entries).sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
+        retentionDays.value = responses[0]?.data.data.retentionDays ?? null;
         selected.value = new Set([...selected.value].filter((key) => entries.value.some((entry) => itemKey(entry) === key)));
     } catch {
         failed.value = true;
@@ -46,7 +46,7 @@ async function load() {
     }
 }
 
-watch(() => props.volume, () => {
+watch(() => props.volumes.join(), () => {
     selected.value = new Set();
     load();
 }, { immediate: true });
@@ -145,7 +145,7 @@ async function emptyTrash() {
     });
 
     if (ok) {
-        await runPurge(() => sendJson(`${props.endpoints.trashEmpty}?volume=${encodeURIComponent(props.volume)}`, 'DELETE'));
+        await runPurge(() => Promise.all(props.volumes.map((volume) => sendJson(`${props.endpoints.trashEmpty}?volume=${encodeURIComponent(volume)}`, 'DELETE'))));
     }
 }
 
