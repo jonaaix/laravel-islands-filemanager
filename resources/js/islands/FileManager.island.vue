@@ -1367,7 +1367,7 @@ function onFileChanged(file) {
     const row = contents.value.files.find((candidate) => candidate.id === file.id);
 
     if (row) {
-        Object.assign(row, { name: file.name, hasNotes: file.hasNotes, commentCount: file.commentCount, updatedAt: file.updatedAt });
+        Object.assign(row, { name: file.name, commentCount: file.commentCount, updatedAt: file.updatedAt });
     }
 }
 </script>

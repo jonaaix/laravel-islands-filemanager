@@ -83,10 +83,7 @@ function drop(event, item) {
                 >{{ item.name }}</span>
                 <SearchSnippet v-if="item.snippet" class="line-clamp-2 text-center" :text="item.snippet" :term="searchTerm" />
                 <span v-if="item.type === 'folder'" class="text-xs tabular-nums text-gray-500 dark:text-gray-400">{{ itemCount(t, item.itemCount) }}</span>
-                <span v-else-if="item.hasNotes || item.commentCount" class="flex items-center gap-2 text-xs tabular-nums text-gray-500 dark:text-gray-400">
-                    <Icon v-if="item.hasNotes" name="o-document-text" class="h-3.5 w-3.5" :aria-label="t('Has notes')" />
-                    <span v-if="item.commentCount" class="inline-flex items-center gap-0.5"><Icon name="o-chat-bubble-left" class="h-3.5 w-3.5" />{{ item.commentCount }}</span>
-                </span>
+                <span v-else-if="item.commentCount" class="inline-flex items-center gap-0.5 text-xs tabular-nums text-gray-500 dark:text-gray-400"><Icon name="o-chat-bubble-left" class="h-3.5 w-3.5" />{{ item.commentCount }}</span>
             </div>
         </template>
     </div>

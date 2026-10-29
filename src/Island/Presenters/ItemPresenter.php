@@ -48,7 +48,6 @@ class ItemPresenter
             'thumbnailUrl' => $file->thumbnail_path ? $route('files.thumbnail', ['v' => $file->updated_at?->timestamp]) : null,
             'url' => $route('files.content'),
             'downloadUrl' => $route('files.content', ['download' => 1]),
-            'hasNotes' => filled($file->notes),
             'commentCount' => (int) ($file->comments_count ?? 0),
             'owner' => $file->uploadedBy?->name,
             'ownerAvatar' => FileManager::avatarOf($file->uploadedBy),

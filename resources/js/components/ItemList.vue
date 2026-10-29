@@ -134,10 +134,7 @@ const cellTone = (isSelected) => (isSelected ? 'text-white' : 'text-gray-500 dar
                                 />
                             </span>
                             <span v-else class="min-w-0 break-words">{{ item.name }}</span>
-                            <span v-if="item.hasNotes || item.commentCount" class="flex shrink-0 items-center gap-1.5 text-xs tabular-nums opacity-70">
-                                <Icon v-if="item.hasNotes" name="o-document-text" class="h-3.5 w-3.5" :aria-label="t('Has notes')" />
-                                <span v-if="item.commentCount" class="inline-flex items-center gap-0.5"><Icon name="o-chat-bubble-left" class="h-3.5 w-3.5" />{{ item.commentCount }}</span>
-                            </span>
+                            <span v-if="item.commentCount" class="inline-flex shrink-0 items-center gap-0.5 text-xs tabular-nums opacity-70"><Icon name="o-chat-bubble-left" class="h-3.5 w-3.5" />{{ item.commentCount }}</span>
                         </span>
                     </td>
                     <td class="whitespace-nowrap px-3 py-1" :class="cellTone(selected.has(itemKey(item)))">
