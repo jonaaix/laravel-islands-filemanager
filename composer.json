@@ -43,5 +43,8 @@
         "allow-plugins": {
             "pestphp/pest-plugin": true
         }
+    },
+    "suggest": {
+        "league/flysystem-aws-s3-v3": "Drives on S3 or S3-compatible storage (AWS, RustFS, \u2026)."
     }
 }
