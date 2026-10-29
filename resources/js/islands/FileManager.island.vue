@@ -839,6 +839,12 @@ async function paste(folderId, volume, { moving = false } = {}) {
     }
 }
 
+function withPasteGroup(folderId, volume, entries) {
+    const pasting = pasteEntries(folderId, volume);
+
+    return pasting.length ? [...pasting, { divider: true }, ...entries] : entries;
+}
+
 function pasteEntries(folderId, volume) {
     const count = clipboard.value?.items.length ?? 0;
 
@@ -875,12 +881,10 @@ function itemEntries(chosen) {
     entries.push({ divider: true });
     entries.push({ label: t('Copy'), icon: 'o-document-duplicate', shortcut: KEYS.copy, action: () => copyToClipboard(chosen) });
 
-    if (single?.type === 'folder') {
-        entries.push(...pasteEntries(single.id, currentVolume.value));
-    }
+    const finish = (list) => (single?.type === 'folder' ? withPasteGroup(single.id, currentVolume.value, list) : list);
 
     if (!canWrite.value) {
-        return entries;
+        return finish(entries);
     }
 
     entries.push({ divider: true });
@@ -894,7 +898,7 @@ function itemEntries(chosen) {
     entries.push({ divider: true });
     entries.push({ label: single ? t('Delete') : t('Delete :count items', { count: chosen.length }), icon: 'o-trash', tone: 'danger', shortcut: KEYS.remove, action: () => remove(chosen) });
 
-    return entries;
+    return finish(entries);
 }
 
 function backgroundEntries() {
@@ -907,12 +911,9 @@ function backgroundEntries() {
             { label: t('Upload folder…'), icon: 'o-folder-arrow-down', action: () => chooseFolderUpload() },
         ]
         : [];
-    const pasting = pasteEntries(contents.value.folderId, currentVolume.value);
-
-    return [
+    return withPasteGroup(contents.value.folderId, currentVolume.value, [
         ...writing,
-        ...pasting,
-        ...(writing.length || pasting.length ? [{ divider: true }] : []),
+        ...(writing.length ? [{ divider: true }] : []),
         { label: t('View as list'), checked: view.value.mode === 'list', shortcut: KEYS.list, action: () => setMode('list') },
         { label: t('View as thumbnails'), checked: view.value.mode === 'grid', shortcut: KEYS.grid, action: () => setMode('grid') },
         { divider: true },
@@ -921,7 +922,7 @@ function backgroundEntries() {
         sortEntry('modified', t('Sort by date modified')),
         sortEntry('added', t('Sort by date added')),
         sortEntry('size', t('Sort by size')),
-    ];
+    ]);
 }
 
 function onItemContextMenu(event, item) {
@@ -950,12 +951,11 @@ function onTreeContextMenu(event, folder) {
 
     menu.value = {
         position: { x: event.clientX, y: event.clientY },
-        entries: [
+        entries: withPasteGroup(folder.id, volumeOf(folder.id), [
             { label: t('Open'), icon: 'o-folder-open', action: () => openFolder(folder.id) },
             { label: t('Download as ZIP'), icon: 'o-archive-box-arrow-down', action: () => downloadZip([item]) },
             { divider: true },
             { label: t('Copy'), icon: 'o-document-duplicate', action: () => copyToClipboard([item]) },
-            ...pasteEntries(folder.id, volumeOf(folder.id)),
             ...(canWriteTo(volumeOf(folder.id))
                 ? [
                     { divider: true },
@@ -965,7 +965,7 @@ function onTreeContextMenu(event, folder) {
                     { label: t('Delete'), icon: 'o-trash', tone: 'danger', action: () => remove([item]) },
                 ]
                 : []),
-        ],
+        ]),
     };
 }
 
