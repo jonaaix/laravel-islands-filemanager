@@ -16,6 +16,7 @@ const props = defineProps({
     location: { type: String, required: true },
     version: { type: Number, default: 0 },
     endpoints: { type: Object, required: true },
+    canWrite: { type: Boolean, default: true },
 });
 
 const emit = defineEmits(['changed', 'quick-look']);
@@ -198,7 +199,8 @@ function onCommentKey(event) {
                         <span v-if="savingNotes" class="text-xs text-gray-400">{{ t('Saving…') }}</span>
                     </div>
                     <Skeleton v-if="!detail" variant="block" height="72px" />
-                    <TextArea v-else v-model="notes" :rows="3" :placeholder="t('Add notes')" @blur="saveNotes" @keydown="onNotesKey" />
+                    <TextArea v-else-if="canWrite" v-model="notes" :rows="3" :placeholder="t('Add notes')" @blur="saveNotes" @keydown="onNotesKey" />
+                    <p v-else class="whitespace-pre-line text-gray-700 dark:text-gray-300">{{ detail.notes || '–' }}</p>
                 </div>
 
                 <div class="space-y-3 border-t border-gray-200 pt-3 dark:border-white/10">
@@ -212,15 +214,15 @@ function onCommentKey(event) {
                                         <PersonChip :name="entry.author" :image="entry.authorAvatar" />
                                         <span class="text-gray-500 dark:text-gray-400"> · {{ formatRelative(entry.createdAt) }}</span>
                                     </div>
-                                    <IconButton v-if="entry.canDelete" :label="t('Delete comment')" size="xs" class="opacity-0 transition-opacity duration-500 ease-out focus-within:opacity-100 group-hover:opacity-100" @click="deleteComment(entry)">
+                                    <IconButton v-if="entry.canDelete && canWrite" :label="t('Delete comment')" size="xs" class="opacity-0 transition-opacity duration-500 ease-out focus-within:opacity-100 group-hover:opacity-100" @click="deleteComment(entry)">
                                         <Icon name="o-x-mark" />
                                     </IconButton>
                                 </div>
                                 <p class="whitespace-pre-line text-gray-700 dark:text-gray-300">{{ entry.body }}</p>
                             </li>
                         </ul>
-                        <TextArea v-model="comment" :rows="2" :placeholder="t('Write a comment')" @keydown="onCommentKey" />
-                        <div class="flex items-center justify-between gap-2">
+                        <TextArea v-if="canWrite" v-model="comment" :rows="2" :placeholder="t('Write a comment')" @keydown="onCommentKey" />
+                        <div v-if="canWrite" class="flex items-center justify-between gap-2">
                             <span class="text-xs text-gray-400">{{ MOD }}Enter</span>
                             <Button tone="primary" size="sm" :disabled="!comment.trim()" :loading="sendingComment" @click="sendComment">
                                 <template #icon><Icon name="o-paper-airplane" class="h-4 w-4" /></template>

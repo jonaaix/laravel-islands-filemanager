@@ -31,6 +31,7 @@ class FolderContentsQuery
     {
         return [
             'volume' => $at->volume->key,
+            'canWrite' => $at->volume->isWritableBy($user),
             'folderId' => $at->folderId(),
             'path' => array_map(fn (Folder $step): array => ['id' => $step->id, 'name' => $step->name], $this->tree->ancestry($at->folder)),
             'folders' => Folder::query()
@@ -61,7 +62,7 @@ class FolderContentsQuery
     public function tree(Authenticatable $user): array
     {
         return array_values(array_map(fn (Volume $volume): array => [
-            ...$volume->toArray(),
+            ...$volume->toArrayFor($user),
             'folders' => array_map(
                 fn (array $row): array => ['id' => $row['folder']->id, 'parentId' => $row['folder']->parent_id, 'name' => $row['folder']->name, 'depth' => $row['depth']],
                 $this->tree->flattened($volume->key),

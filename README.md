@@ -89,13 +89,15 @@ IslandsSearch::route('search', [FileSearchSource::class, FileContentSearchSource
 ```
 
 Drives are Laravel disks listed under `volumes` in `config/filemanager.php`; each appears in the
-folder tree and may ask for a Gate ability of its own:
+folder tree and may ask for a Gate ability to be seen and another to be changed (read-only otherwise).
+Copying and moving between drives can be restricted with `transfer_ability`:
 
 ```php
 'volumes' => [
     'files' => ['name' => 'Files', 'disk' => 'filemanager'],
-    'archive' => ['name' => 'Archive', 'disk' => 's3-archive', 'ability' => 'view-archive'],
+    'archive' => ['name' => 'Archive', 'disk' => 's3-archive', 'ability' => 'view-archive', 'write_ability' => 'edit-archive'],
 ],
+'transfer_ability' => null,
 ```
 
 Thumbnails and extracted text are kept on the same disk in a hidden `.filemanager` folder. Route

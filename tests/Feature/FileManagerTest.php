@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 
@@ -383,4 +384,47 @@ test('helper data lives in the hidden folder of the volume and follows a file to
     Storage::disk('archive')->assertExists([$file->path, $file->thumbnail_path]);
     Storage::disk('filemanager')->assertMissing([$file->path, $file->thumbnail_path]);
     $this->get(route('filemanager.files.content', $file))->assertOk();
+});
+
+test('copying duplicates folders and files with notes, comments and helpers, also onto another volume', function () {
+    $this->actingAs($author = $this->member());
+    $contracts = Folder::query()->create(['name' => 'Contracts']);
+    $this->postJson(route('filemanager.files.store'), ['folder_id' => (string) $contracts->id, 'files' => [UploadedFile::fake()->image('scan.jpg', 400, 300)]])->assertOk();
+    $original = File::query()->sole();
+    $original->update(['notes' => 'Signed']);
+    $original->comments()->create(['user_id' => $author->id, 'body' => 'Checked']);
+
+    $this->postJson(route('filemanager.items.copy'), ['folders' => [$contracts->id], 'target_volume' => 'files'])->assertOk();
+    $this->postJson(route('filemanager.items.copy'), ['files' => [$original->id], 'target_volume' => 'archive'])->assertOk();
+
+    expect(Folder::query()->where('volume', 'files')->pluck('name')->sort()->values()->all())->toBe(['Contracts', 'Contracts 2'])
+        ->and(File::query()->count())->toBe(3);
+
+    $archived = File::query()->where('volume', 'archive')->sole();
+    expect($archived->notes)->toBe('Signed')
+        ->and($archived->comments()->sole()->body)->toBe('Checked')
+        ->and($archived->path)->not->toBe($original->path);
+    Storage::disk('archive')->assertExists([$archived->path, $archived->thumbnail_path]);
+    Storage::disk('filemanager')->assertExists($original->path);
+
+    $this->postJson(route('filemanager.items.copy'), ['folders' => [$contracts->id], 'target_volume' => 'files', 'target_id' => $contracts->id])->assertJsonValidationErrors('target_id');
+});
+
+test('a volume can be read-only for some users and moving between volumes can be restricted', function () {
+    $folder = Folder::query()->create(['name' => 'Invoices']);
+    config(['filemanager.volumes.files.write_ability' => 'filemanager.write', 'filemanager.transfer_ability' => 'filemanager.transfer']);
+    Gate::define('filemanager.write', fn ($user): bool => $user->name !== 'Reader');
+    Gate::define('filemanager.transfer', fn ($user): bool => false);
+
+    $this->actingAs($this->member(['name' => 'Reader']));
+    $this->getJson(route('filemanager.contents'))->assertOk()->assertJsonPath('data.canWrite', false);
+    $this->postJson(route('filemanager.folders.store'), ['name' => 'New'])->assertForbidden();
+    $this->putJson(route('filemanager.folders.rename', $folder), ['name' => 'Renamed'])->assertForbidden();
+    $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$folder->id]])->assertForbidden();
+
+    $this->actingAs($this->member());
+    $this->postJson(route('filemanager.folders.store'), ['name' => 'New'])->assertOk();
+    $this->putJson(route('filemanager.items.move'), ['folders' => [$folder->id], 'target_volume' => 'archive'])->assertForbidden();
+    $this->postJson(route('filemanager.items.copy'), ['folders' => [$folder->id], 'target_volume' => 'archive'])->assertForbidden();
+    $this->postJson(route('filemanager.items.copy'), ['folders' => [$folder->id], 'target_volume' => 'files'])->assertOk();
 });

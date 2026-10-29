@@ -40,6 +40,7 @@ class FileManagerProps
             ],
             'tileSize' => ['min' => ViewSettingStore::MIN_TILE, 'max' => ViewSettingStore::MAX_TILE],
             'preferences' => $this->preferences->for($user),
+            'mayTransfer' => FileManager::mayTransfer($user),
             'paneWidths' => PreferenceStore::limits(),
             'endpoints' => [
                 'contents' => FileManager::route('contents'),
@@ -51,6 +52,7 @@ class FileManagerProps
                 'foldersStoreWithItems' => FileManager::route('folders.store-with-items'),
                 'foldersRename' => $route('folders.rename', 'folder'),
                 'itemsMove' => FileManager::route('items.move'),
+                'itemsCopy' => FileManager::route('items.copy'),
                 'itemsDestroy' => FileManager::route('items.destroy'),
                 'itemsZip' => FileManager::route('items.zip'),
                 'filesStore' => FileManager::route('files.store'),
@@ -63,7 +65,7 @@ class FileManagerProps
                 'o-folder', 'o-folder-plus', 'o-folder-open', 'o-document', 'o-document-text', 'o-photo', 'o-arrow-up-tray', 'o-arrow-down-tray',
                 'o-pencil-square', 'o-trash', 'o-arrows-right-left', 'o-chat-bubble-left', 'o-chevron-right', 'o-chevron-left', 'o-chevron-down',
                 'o-chevron-up', 'o-x-mark', 'o-home', 'o-arrow-top-right-on-square', 'o-paper-airplane', 'o-eye', 'o-archive-box-arrow-down',
-                'o-question-mark-circle', 'o-magnifying-glass', 'o-information-circle', 'o-ellipsis-horizontal', 'o-folder-arrow-down', 'o-server-stack',
+                'o-question-mark-circle', 'o-magnifying-glass', 'o-information-circle', 'o-ellipsis-horizontal', 'o-folder-arrow-down', 'o-server-stack', 'o-document-duplicate', 'o-clipboard-document',
             ]),
         ];
     }

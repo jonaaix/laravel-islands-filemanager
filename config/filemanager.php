@@ -24,14 +24,20 @@ return [
 
     /*
     | The drives shown in the folder tree, in this order; the first is opened by default. Each is a
-    | Laravel disk of its own and may ask for an extra Gate ability on top of `ability`. The package
+    | Laravel disk of its own and may ask for an extra Gate ability on top of `ability` to be seen,
+    | and for `write_ability` to be changed — without it the drive is read-only for that user. The package
     | brings a private local disk `filemanager` (storage/app/filemanager) unless the application
     | defines one with that name. Helper data (thumbnails, extracted text) is kept on the same disk
     | in a hidden `.filemanager` directory at its root.
     */
     'volumes' => [
-        'files' => ['name' => 'Files', 'disk' => env('FILEMANAGER_DISK', 'filemanager'), 'ability' => null],
+        'files' => ['name' => 'Files', 'disk' => env('FILEMANAGER_DISK', 'filemanager'), 'ability' => null, 'write_ability' => null],
     ],
+
+    /*
+    | Copying and moving between drives. Null lets everyone who may write to both drives do it.
+    */
+    'transfer_ability' => null,
 
     /*
     | Every file gets a directory of its own, named by an md5 of the salt and its id, so directories

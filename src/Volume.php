@@ -18,6 +18,7 @@ final readonly class Volume
         public string $name,
         public string $disk,
         public ?string $ability = null,
+        public ?string $writeAbility = null,
     ) {}
 
     public function filesystem(): Filesystem
@@ -28,6 +29,11 @@ final readonly class Volume
     public function isVisibleTo(Authenticatable $user): bool
     {
         return $this->ability === null || Gate::forUser($user)->allows($this->ability);
+    }
+
+    public function isWritableBy(Authenticatable $user): bool
+    {
+        return $this->isVisibleTo($user) && ($this->writeAbility === null || Gate::forUser($user)->allows($this->writeAbility));
     }
 
     public function isLocal(): bool
@@ -41,10 +47,10 @@ final readonly class Volume
     }
 
     /**
-     * @return array{key: string, name: string}
+     * @return array{key: string, name: string, canWrite: bool}
      */
-    public function toArray(): array
+    public function toArrayFor(Authenticatable $user): array
     {
-        return ['key' => $this->key, 'name' => __($this->name)];
+        return ['key' => $this->key, 'name' => __($this->name), 'canWrite' => $this->isWritableBy($user)];
     }
 }

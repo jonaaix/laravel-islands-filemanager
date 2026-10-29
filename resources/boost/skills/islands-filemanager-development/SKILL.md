@@ -31,7 +31,10 @@ Never copy package code into the app to change it — change the package or its 
 
 - **Drives are volumes.** `filemanager.volumes` lists Laravel disks; every folder, file and view
   setting carries its `volume`. Code works with a `Location` (volume + folder), never a bare folder id.
-  Moving to another volume copies the bytes to the other disk (`VolumeTransfer`).
+  Moving to another volume copies the bytes to the other disk (`VolumeTransfer`); copies are made by
+  `ItemCopier`. A volume's `write_ability` makes it read-only for users without it, and
+  `transfer_ability` guards copying/moving between volumes. Every changing endpoint checks both —
+  keep that when adding one.
 - **The folder tree is virtual.** Folders exist only in the database; each file has its own hashed
   directory, and the stored `path` is authoritative. Never build paths by hand and never move files
   on disk when moving them inside one volume.

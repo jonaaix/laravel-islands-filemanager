@@ -40,7 +40,7 @@ class FileManager
         $volumes = [];
 
         foreach (config('filemanager.volumes', []) as $key => $volume) {
-            $volumes[$key] = new Volume($key, $volume['name'] ?? $key, $volume['disk'], $volume['ability'] ?? null);
+            $volumes[$key] = new Volume($key, $volume['name'] ?? $key, $volume['disk'], $volume['ability'] ?? null, $volume['write_ability'] ?? null);
         }
 
         return $volumes;
@@ -64,6 +64,13 @@ class FileManager
     public static function volumesFor(Authenticatable $user): array
     {
         return array_filter(self::volumes(), fn (Volume $volume): bool => $volume->isVisibleTo($user));
+    }
+
+    public static function mayTransfer(Authenticatable $user): bool
+    {
+        $ability = config('filemanager.transfer_ability');
+
+        return $ability === null || Gate::forUser($user)->allows($ability);
     }
 
     public static function table(string $name): string

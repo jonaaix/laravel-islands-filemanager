@@ -27,7 +27,7 @@ const indent = (depth) => '\u2003'.repeat(depth);
 const options = computed(() => {
     const moved = new Set(props.items.filter((item) => item.type === 'folder').map((item) => item.id));
 
-    return volumes.value.flatMap((volume) => [
+    return volumes.value.filter((volume) => volume.key === props.currentVolume).flatMap((volume) => [
         { value: encode(volume.key, null), label: volume.name, depth: 0 },
         ...volume.folders.filter((folder) => !moved.has(folder.id)).map((folder) => ({ value: encode(volume.key, folder.id), label: indent(folder.depth + 1) + folder.name, depth: folder.depth + 1 })),
     ]);

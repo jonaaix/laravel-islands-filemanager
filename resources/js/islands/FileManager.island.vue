@@ -43,6 +43,9 @@ const allFolders = computed(() => volumes.value.flatMap((volume) => volume.folde
 const currentVolume = computed(() => contents.value.volume);
 const volumeOf = (folderId) => (folderId ? (allFolders.value.find((folder) => folder.id === folderId)?.volume ?? currentVolume.value) : currentVolume.value);
 const volumeName = (key) => volumes.value.find((volume) => volume.key === key)?.name ?? key;
+const canWriteTo = (key) => volumes.value.find((volume) => volume.key === key)?.canWrite ?? false;
+const canWrite = computed(() => contents.value.canWrite);
+const clipboard = ref(null);
 const view = ref({ ...props.initial.contents.view });
 const loading = ref(false);
 const uploading = ref(false);
@@ -708,6 +711,12 @@ async function upload(entries, targetId, targetVolume = volumeOf(targetId)) {
 // ----- Drag and drop -----
 
 function onItemDragStart(event, item) {
+    if (!canWrite.value) {
+        event.preventDefault();
+
+        return;
+    }
+
     const key = itemKey(item);
 
     if (!selected.value.has(key)) {
@@ -720,6 +729,18 @@ function onItemDragStart(event, item) {
 async function dropOn(event, folderId, volume = volumeOf(folderId)) {
     filesOver.value = false;
     filesDragDepth = 0;
+
+    if (!canWriteTo(volume)) {
+        toast.warning(t(':drive is read-only', { drive: volumeName(volume) }));
+
+        return;
+    }
+
+    if (carriesItems(event) && volume !== currentVolume.value) {
+        toast.info(t('To move items to another drive, copy them and use “Move here” there.'));
+
+        return;
+    }
 
     if (carriesItems(event)) {
         const payload = readDraggedItems(event);
@@ -773,6 +794,64 @@ function onPaneDrop(event) {
 
 // ----- Context menu -----
 
+function copyToClipboard(chosen) {
+    if (!chosen.length) {
+        return;
+    }
+
+    clipboard.value = { volume: currentVolume.value, items: chosen.map(({ type, id, name }) => ({ type, id, name })) };
+    toast.info(chosen.length === 1 ? t(':name copied', { name: chosen[0].name }) : t(':count items copied', { count: chosen.length }));
+}
+
+function mayPasteInto(volume, { moving = false } = {}) {
+    const source = clipboard.value;
+
+    if (!source || !canWriteTo(volume) || (moving && !canWriteTo(source.volume))) {
+        return false;
+    }
+
+    return source.volume === volume || props.mayTransfer;
+}
+
+async function paste(folderId, volume, { moving = false } = {}) {
+    const source = clipboard.value;
+
+    if (!mayPasteInto(volume, { moving })) {
+        return;
+    }
+
+    const payload = { ...toPayload(source.items), target_volume: volume, target_id: folderId };
+
+    try {
+        if (moving) {
+            payload.folders = payload.folders.filter((id) => id !== folderId);
+            await sendJson(endpoints.itemsMove, 'PUT', payload);
+            clipboard.value = null;
+            toast.success(t('Moved'));
+        } else {
+            await sendJson(endpoints.itemsCopy, 'POST', payload);
+            toast.success(t('Copied'));
+        }
+
+        await refresh();
+    } catch (error) {
+        toast.danger(firstError(error, moving ? t('Could not move the items') : t('Could not copy the items')));
+    }
+}
+
+function pasteEntries(folderId, volume) {
+    const count = clipboard.value?.items.length ?? 0;
+
+    if (!count) {
+        return [];
+    }
+
+    return [
+        { label: count === 1 ? t('Paste 1 item') : t('Paste :count items', { count }), icon: 'o-clipboard-document', shortcut: KEYS.paste, disabled: !mayPasteInto(volume), action: () => paste(folderId, volume) },
+        { label: count === 1 ? t('Move 1 item here') : t('Move :count items here', { count }), icon: 'o-arrows-right-left', shortcut: KEYS.moveHere, disabled: !mayPasteInto(volume, { moving: true }), action: () => paste(folderId, volume, { moving: true }) },
+    ];
+}
+
 function itemEntries(chosen) {
     const single = chosen.length === 1 ? chosen[0] : null;
     const files = chosen.filter((item) => item.type === 'file');
@@ -794,6 +873,17 @@ function itemEntries(chosen) {
     }
 
     entries.push({ divider: true });
+    entries.push({ label: t('Copy'), icon: 'o-document-duplicate', shortcut: KEYS.copy, action: () => copyToClipboard(chosen) });
+
+    if (single?.type === 'folder') {
+        entries.push(...pasteEntries(single.id, currentVolume.value));
+    }
+
+    if (!canWrite.value) {
+        return entries;
+    }
+
+    entries.push({ divider: true });
 
     if (single) {
         entries.push({ label: t('Rename'), icon: 'o-pencil-square', shortcut: KEYS.rename, action: () => startRename(single) });
@@ -810,11 +900,19 @@ function itemEntries(chosen) {
 function backgroundEntries() {
     const sortEntry = (column, label) => ({ label, checked: view.value.sortBy === column, action: () => sortBy(column) });
 
+    const writing = canWrite.value
+        ? [
+            { label: t('New folder'), icon: 'o-folder-plus', shortcut: KEYS.newFolder, action: createFolder },
+            { label: t('Upload files…'), icon: 'o-arrow-up-tray', shortcut: KEYS.upload, action: () => chooseUpload() },
+            { label: t('Upload folder…'), icon: 'o-folder-arrow-down', action: () => chooseFolderUpload() },
+        ]
+        : [];
+    const pasting = pasteEntries(contents.value.folderId, currentVolume.value);
+
     return [
-        { label: t('New folder'), icon: 'o-folder-plus', shortcut: KEYS.newFolder, action: createFolder },
-        { label: t('Upload files…'), icon: 'o-arrow-up-tray', shortcut: KEYS.upload, action: () => chooseUpload() },
-        { label: t('Upload folder…'), icon: 'o-folder-arrow-down', action: () => chooseFolderUpload() },
-        { divider: true },
+        ...writing,
+        ...pasting,
+        ...(writing.length || pasting.length ? [{ divider: true }] : []),
         { label: t('View as list'), checked: view.value.mode === 'list', shortcut: KEYS.list, action: () => setMode('list') },
         { label: t('View as thumbnails'), checked: view.value.mode === 'grid', shortcut: KEYS.grid, action: () => setMode('grid') },
         { divider: true },
@@ -856,10 +954,17 @@ function onTreeContextMenu(event, folder) {
             { label: t('Open'), icon: 'o-folder-open', action: () => openFolder(folder.id) },
             { label: t('Download as ZIP'), icon: 'o-archive-box-arrow-down', action: () => downloadZip([item]) },
             { divider: true },
-            { label: t('Rename'), icon: 'o-pencil-square', action: () => (treeRenamingId.value = folder.id) },
-            { label: t('Move to…'), icon: 'o-arrows-right-left', action: () => startMove([item]) },
-            { divider: true },
-            { label: t('Delete'), icon: 'o-trash', tone: 'danger', action: () => remove([item]) },
+            { label: t('Copy'), icon: 'o-document-duplicate', action: () => copyToClipboard([item]) },
+            ...pasteEntries(folder.id, volumeOf(folder.id)),
+            ...(canWriteTo(volumeOf(folder.id))
+                ? [
+                    { divider: true },
+                    { label: t('Rename'), icon: 'o-pencil-square', action: () => (treeRenamingId.value = folder.id) },
+                    { label: t('Move to…'), icon: 'o-arrows-right-left', action: () => startMove([item]) },
+                    { divider: true },
+                    { label: t('Delete'), icon: 'o-trash', tone: 'danger', action: () => remove([item]) },
+                ]
+                : []),
         ],
     };
 }
@@ -980,7 +1085,17 @@ function onKeydown(event) {
 
     const newFolderWithItems = isMac ? event.metaKey && event.ctrlKey && event.code === 'KeyN' : event.ctrlKey && event.altKey && event.shiftKey && event.code === 'KeyN';
 
-    if (newFolderWithItems) {
+    const hasTextSelection = Boolean(window.getSelection()?.toString());
+
+    if (mod && event.code === 'KeyC' && !event.altKey && !event.shiftKey && !hasTextSelection) {
+        handled();
+        copyToClipboard(selectedItems.value);
+    } else if (mod && event.code === 'KeyV') {
+        handled();
+        paste(contents.value.folderId, currentVolume.value, { moving: event.altKey });
+    } else if (!canWrite.value && (newFolderWithItems || (mod && event.code === 'KeyN') || (mod && event.altKey && event.code === 'KeyU') || (mod && event.key === 'Backspace') || event.key === 'Delete' || event.key === 'Enter')) {
+        return;
+    } else if (newFolderWithItems) {
         handled();
         createFolderWithItems(selectedItems.value);
     } else if (mod && (event.shiftKey || event.altKey) && event.code === 'KeyN') {
@@ -1183,7 +1298,7 @@ function onFileChanged(file) {
                     <div v-else-if="!totalCount" class="flex h-full flex-col items-center justify-center gap-1.5 p-6 text-center">
                         <Icon name="o-folder-open" class="h-10 w-10 text-gray-300 dark:text-gray-600" />
                         <p class="font-medium text-gray-900 dark:text-white">{{ t('This folder is empty') }}</p>
-                        <p class="text-gray-500 dark:text-gray-400">{{ t('Drop files here, or right-click for more.') }}</p>
+                        <p v-if="canWrite" class="text-gray-500 dark:text-gray-400">{{ t('Drop files here, or right-click for more.') }}</p>
                     </div>
 
                     <div v-else-if="!items.length" class="flex h-full flex-col items-center justify-center gap-1.5 p-6 text-center">
@@ -1244,6 +1359,7 @@ function onFileChanged(file) {
                     />
                     <div class="h-full overflow-y-auto">
                         <InfoPanel
+                            :can-write="canWrite"
                             :items="selectedItems"
                             :folder-name="folderName"
                             :folder-item-count="totalCount"
@@ -1264,6 +1380,8 @@ function onFileChanged(file) {
                     <template v-if="selectedSize"> · {{ formatFileSize(selectedSize) }}</template>
                 </span>
                 <span class="flex items-center gap-3">
+                    <span v-if="!canWrite">{{ t('Read-only') }}</span>
+                    <span v-if="clipboard">{{ t(':count copied', { count: clipboard.items.length }) }}</span>
                     <span v-if="uploading" class="tabular-nums">{{ uploadProgress ? t('Uploading :done of :total', uploadProgress) : t('Uploading…') }}</span>
                     <button type="button" class="inline-flex items-center gap-1 hover:text-gray-900 dark:hover:text-white" @click="helpOpen = true">
                         <Icon name="o-question-mark-circle" class="h-3.5 w-3.5" />

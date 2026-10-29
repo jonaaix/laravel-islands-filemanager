@@ -17,6 +17,7 @@ use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Aaix\LaravelIslandsFilemanager\Services\FileStore;
 use Aaix\LaravelIslandsFilemanager\Services\FolderPathResolver;
+use Aaix\LaravelIslandsFilemanager\Services\ItemCopier;
 use Aaix\LaravelIslandsFilemanager\Services\ZipBuilder;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\JsonResponse;
@@ -103,7 +104,9 @@ class FileManagerController extends Controller
 
         $validated = $request->validate(['name' => ['nullable', 'string', 'max:255']]);
 
-        $folder = $writer->create($validated['name'] ?? null, $this->location($request, $user, folderKey: 'parent_id'), $user);
+        $location = $this->location($request, $user, folderKey: 'parent_id');
+        $this->authorizeWrite($user, $location);
+        $folder = $writer->create($validated['name'] ?? null, $location, $user);
 
         return response()->json(['data' => ['folder' => $this->presenter->folder($folder)]]);
     }
@@ -113,14 +116,16 @@ class FileManagerController extends Controller
         $user = $this->authorizeAccess($request);
         [$folders, $files] = $this->selectedItems($request, $user);
 
-        $folder = $writer->moveIntoNewFolder($folders, $files, $this->location($request, $user, folderKey: 'parent_id'), $user);
+        $location = $this->location($request, $user, folderKey: 'parent_id');
+        $this->authorizeTransfer($user, $folders, $files, $location);
+        $folder = $writer->moveIntoNewFolder($folders, $files, $location, $user);
 
         return response()->json(['data' => ['folder' => $this->presenter->folder($folder)]]);
     }
 
     public function renameFolder(Request $request, Folder $folder, FolderWriter $writer): JsonResponse
     {
-        $this->authorizeVolume($this->authorizeAccess($request), $folder);
+        $this->authorizeWrite($this->authorizeAccess($request), $folder);
         $validated = $request->validate(['name' => ['required', 'string', 'max:255']]);
 
         $writer->rename($folder, trim($validated['name']));
@@ -135,15 +140,30 @@ class FileManagerController extends Controller
         $user = $this->authorizeAccess($request);
         [$folders, $files] = $this->selectedItems($request, $user);
 
-        $writer->move($folders, $files, $this->location($request, $user, 'target_volume', 'target_id'));
+        $target = $this->location($request, $user, 'target_volume', 'target_id');
+        $this->authorizeTransfer($user, $folders, $files, $target);
+        $writer->move($folders, $files, $target);
 
         return response()->json(['data' => ['moved' => $folders->count() + $files->count()]]);
+    }
+
+    public function copyItems(Request $request, ItemCopier $copier): JsonResponse
+    {
+        $user = $this->authorizeAccess($request);
+        [$folders, $files] = $this->selectedItems($request, $user);
+        $target = $this->location($request, $user, 'target_volume', 'target_id');
+        $this->authorizeTransfer($user, $folders, $files, $target, copying: true);
+
+        $copier->copy($folders, $files, $target, $user);
+
+        return response()->json(['data' => ['copied' => $folders->count() + $files->count()]]);
     }
 
     public function destroyItems(Request $request, ItemsWriter $writer): JsonResponse
     {
         $user = $this->authorizeAccess($request);
         [$folders, $files] = $this->selectedItems($request, $user);
+        $this->authorizeWrite($user, ...$folders, ...$files);
 
         $writer->delete($folders, $files);
 
@@ -174,6 +194,7 @@ class FileManagerController extends Controller
         ]);
 
         $location = $this->location($request, $user, folderKey: 'folder_id');
+        $this->authorizeWrite($user, $location);
 
         foreach ($validated['files'] as $index => $upload) {
             $store->store($upload, $folders->resolve($location, $validated['paths'][$index] ?? '', $user), $user);
@@ -193,7 +214,7 @@ class FileManagerController extends Controller
     public function updateFile(Request $request, File $file): JsonResponse
     {
         $user = $this->authorizeAccess($request);
-        $this->authorizeVolume($user, $file);
+        $this->authorizeWrite($user, $file);
 
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
@@ -234,7 +255,7 @@ class FileManagerController extends Controller
     public function storeComment(Request $request, File $file): JsonResponse
     {
         $user = $this->authorizeAccess($request);
-        $this->authorizeVolume($user, $file);
+        $this->authorizeWrite($user, $file);
         $validated = $request->validate(['body' => ['required', 'string', 'max:5000']]);
 
         $file->comments()->create(['user_id' => $user->getAuthIdentifier(), 'body' => trim($validated['body'])]);
@@ -246,7 +267,7 @@ class FileManagerController extends Controller
     {
         $user = $this->authorizeAccess($request);
 
-        $this->authorizeVolume($user, $comment->file);
+        $this->authorizeWrite($user, $comment->file);
 
         if ($comment->user_id !== $user->getAuthIdentifier()) {
             throw new AccessDeniedHttpException;
@@ -293,6 +314,36 @@ class FileManagerController extends Controller
         }
 
         return [$folders, $files];
+    }
+
+    private function authorizeWrite(Authenticatable $user, Location|File|Folder ...$targets): void
+    {
+        foreach ($targets as $target) {
+            $volume = $target instanceof Location ? $target->volume : $target->volume();
+
+            if (! $volume->isWritableBy($user)) {
+                throw new AccessDeniedHttpException;
+            }
+        }
+    }
+
+    /**
+     * @param  Collection<int, Folder>  $folders
+     * @param  Collection<int, File>  $files
+     */
+    private function authorizeTransfer(Authenticatable $user, Collection $folders, Collection $files, Location $target, bool $copying = false): void
+    {
+        $this->authorizeWrite($user, $target);
+
+        if (! $copying) {
+            $this->authorizeWrite($user, ...$folders, ...$files);
+        }
+
+        $leavesVolume = $folders->concat($files)->contains(fn (File|Folder $item): bool => ! $target->isSameVolume($item->getAttribute('volume')));
+
+        if ($leavesVolume && ! FileManager::mayTransfer($user)) {
+            throw new AccessDeniedHttpException;
+        }
     }
 
     private function authorizeVolume(Authenticatable $user, File|Folder $item): void
