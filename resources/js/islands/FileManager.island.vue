@@ -21,7 +21,10 @@ import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, toPayload } from '../support/dragItems.js';
 import { collectDroppedFiles, fromFileInput, takeDroppedEntries } from '../support/droppedFiles.js';
 import { KEYS, hasMod, isMac, isTyping } from '../support/shortcuts.js';
+import { createMenus } from '../support/menus.js';
 import { useMarquee } from '../support/marquee.js';
+import { useTabs } from '../support/tabs.js';
+import { useSelectionKeys } from '../support/selectionKeys.js';
 import { moveBack, useUndo } from '../support/undo.js';
 import { sortItems } from '../support/sorting.js';
 
@@ -55,74 +58,22 @@ const trashCount = ref(0);
 
 // ----- Tabs -----
 
-const startLocation = { volume: props.initial.contents.volume, folderId: props.initial.contents.folderId };
-const savedTabs = props.preferences.tabs;
-const tabs = ref(savedTabs.length ? savedTabs.map((tab) => ({ ...tab })) : [startLocation]);
-const activeTab = ref(savedTabs.length ? props.preferences.activeTab : 0);
-let tabsTimer = null;
-
-tabs.value[activeTab.value] = { ...startLocation };
+const { tabs, activeTab, rememberActiveTab, openTab, switchTab, closeTab } = useTabs({
+    saved: props.preferences.tabs,
+    activeIndex: props.preferences.activeTab,
+    start: { volume: props.initial.contents.volume, folderId: props.initial.contents.folderId },
+    saveUrl: endpoints.preferences,
+    here: () => ({ volume: currentVolume.value, folderId: contents.value.folderId }),
+    open: ({ folderId, volume }) => openFolder(folderId, null, volume),
+});
 
 const tabLabel = (tab) => (tab.folderId ? (allFolders.value.find((folder) => folder.id === tab.folderId)?.name ?? '…') : volumeName(tab.volume));
-
-function saveTabs() {
-    clearTimeout(tabsTimer);
-    tabsTimer = setTimeout(() => {
-        sendJson(endpoints.preferences, 'PUT', {
-            tabs: tabs.value.map((tab) => ({ volume: tab.volume, folder_id: tab.folderId })),
-            active_tab: activeTab.value,
-        }).catch(() => null);
-    }, 400);
-}
-
-function rememberActiveTab() {
-    const current = tabs.value[activeTab.value];
-
-    if (current && (current.volume !== currentVolume.value || current.folderId !== contents.value.folderId)) {
-        tabs.value[activeTab.value] = { volume: currentVolume.value, folderId: contents.value.folderId };
-        saveTabs();
-    }
-}
-
-function openTab(location = { volume: currentVolume.value, folderId: contents.value.folderId }) {
-    tabs.value.push({ ...location });
-    activeTab.value = tabs.value.length - 1;
-    saveTabs();
-    openFolder(location.folderId, null, location.volume);
-}
-
-function switchTab(index) {
-    if (index === activeTab.value) {
-        return;
-    }
-
-    activeTab.value = index;
-    saveTabs();
-    openFolder(tabs.value[index].folderId, null, tabs.value[index].volume);
-}
-
-function closeTab(index) {
-    if (tabs.value.length === 1) {
-        return;
-    }
-
-    const wasActive = index === activeTab.value;
-    tabs.value.splice(index, 1);
-
-    if (wasActive) {
-        activeTab.value = Math.min(index, tabs.value.length - 1);
-        openFolder(tabs.value[activeTab.value].folderId, null, tabs.value[activeTab.value].volume);
-    } else if (index < activeTab.value) {
-        activeTab.value--;
-    }
-
-    saveTabs();
-}
 
 function dropOnTab(event, index) {
     const tab = tabs.value[index];
     dropOn(event, tab.folderId, tab.volume);
 }
+
 const view = ref({ ...props.initial.contents.view });
 const loading = ref(false);
 const uploading = ref(false);
@@ -1041,93 +992,34 @@ async function paste(folderId, volume, { moving = false } = {}) {
     }
 }
 
-function withPasteGroup(folderId, volume, entries) {
-    const pasting = pasteEntries(folderId, volume);
-
-    return pasting.length ? [...pasting, { divider: true }, ...entries] : entries;
-}
-
-function pasteEntries(folderId, volume) {
-    const count = clipboard.value?.items.length ?? 0;
-
-    if (!count) {
-        return [];
-    }
-
-    return [
-        { label: count === 1 ? t('Paste 1 item') : t('Paste :count items', { count }), icon: 'o-clipboard-document', shortcut: KEYS.paste, disabled: !mayPasteInto(volume), action: () => paste(folderId, volume) },
-        { label: count === 1 ? t('Move 1 item here') : t('Move :count items here', { count }), icon: 'o-arrows-right-left', shortcut: KEYS.moveHere, disabled: !mayPasteInto(volume, { moving: true }), action: () => paste(folderId, volume, { moving: true }) },
-    ];
-}
-
-function itemEntries(chosen) {
-    const single = chosen.length === 1 ? chosen[0] : null;
-    const files = chosen.filter((item) => item.type === 'file');
-    const entries = [];
-
-    if (single?.type === 'folder') {
-        entries.push({ label: t('Open'), icon: 'o-folder-open', shortcut: KEYS.open, action: () => openItem(single) });
-        entries.push({ label: t('Open in new tab'), icon: 'o-square-2-stack', action: () => openTab({ volume: currentVolume.value, folderId: single.id }) });
-    } else if (single) {
-        entries.push({ label: t('Preview'), icon: 'o-eye', shortcut: KEYS.quickLook, action: () => openItem(single) });
-        entries.push({ label: t('Download'), icon: 'o-arrow-down-tray', action: () => downloadEach([single]) });
-    }
-
-    if (!single || single.type === 'folder') {
-        entries.push({ label: t('Download as ZIP'), icon: 'o-archive-box-arrow-down', action: () => downloadZip(chosen) });
-    }
-
-    if (!single && files.length) {
-        entries.push({ label: t('Download :count files individually', { count: files.length }), icon: 'o-arrow-down-tray', action: () => downloadEach(files) });
-    }
-
-    entries.push({ divider: true });
-    entries.push({ label: t('Copy'), icon: 'o-document-duplicate', shortcut: KEYS.copy, action: () => copyToClipboard(chosen) });
-
-    const finish = (list) => (single?.type === 'folder' ? withPasteGroup(single.id, currentVolume.value, list) : list);
-
-    if (!canWrite.value) {
-        return finish(entries);
-    }
-
-    entries.push({ divider: true });
-
-    if (single) {
-        entries.push({ label: t('Rename'), icon: 'o-pencil-square', shortcut: KEYS.rename, action: () => startRename(single) });
-    }
-
-    entries.push({ label: t('Move to…'), icon: 'o-arrows-right-left', action: () => startMove(chosen) });
-    entries.push({ label: chosen.length === 1 ? t('New folder with 1 item') : t('New folder with :count items', { count: chosen.length }), icon: 'o-folder-plus', shortcut: KEYS.newFolderWithItems, action: () => createFolderWithItems(chosen) });
-    entries.push({ divider: true });
-    entries.push({ label: t('Move to trash'), icon: 'o-trash', tone: 'danger', shortcut: KEYS.remove, action: () => remove(chosen) });
-
-    return finish(entries);
-}
-
-function backgroundEntries() {
-    const sortEntry = (column, label) => ({ label, checked: view.value.sortBy === column, action: () => sortBy(column) });
-
-    const writing = canWrite.value
-        ? [
-            { label: t('New folder'), icon: 'o-folder-plus', shortcut: KEYS.newFolder, action: createFolder },
-            { label: t('Upload files…'), icon: 'o-arrow-up-tray', shortcut: KEYS.upload, action: () => chooseUpload() },
-            { label: t('Upload folder…'), icon: 'o-folder-arrow-down', action: () => chooseFolderUpload() },
-        ]
-        : [];
-    return withPasteGroup(contents.value.folderId, currentVolume.value, [
-        ...writing,
-        { label: t('New tab'), icon: 'o-square-2-stack', shortcut: KEYS.newTab, action: () => openTab() },
-        { divider: true },
-        { label: t('View as list'), checked: view.value.mode === 'list', shortcut: KEYS.list, action: () => setMode('list') },
-        { label: t('View as thumbnails'), checked: view.value.mode === 'grid', shortcut: KEYS.grid, action: () => setMode('grid') },
-        { divider: true },
-        sortEntry('name', t('Sort by name')),
-        sortEntry('owner', t('Sort by owner')),
-        sortEntry('modified', t('Sort by date modified')),
-        sortEntry('added', t('Sort by date added')),
-        sortEntry('size', t('Sort by size')),
-    ]);
-}
+const { itemEntries, backgroundEntries, treeEntries } = createMenus({
+    t,
+    clipboard,
+    currentVolume,
+    canWrite,
+    view,
+    contents,
+    mayPasteInto,
+    paste,
+    openItem,
+    openTab,
+    openFolder,
+    downloadEach,
+    downloadZip,
+    copyToClipboard,
+    startRename,
+    startTreeRename: (folderId) => (treeRenamingId.value = folderId),
+    startMove,
+    createFolderWithItems,
+    remove,
+    createFolder,
+    chooseUpload,
+    chooseFolderUpload,
+    setMode,
+    sortBy,
+    volumeOf,
+    canWriteTo,
+});
 
 function onItemContextMenu(event, item) {
     const key = itemKey(item);
@@ -1151,27 +1043,7 @@ function onItemActions(event, item) {
 }
 
 function onTreeContextMenu(event, folder) {
-    const item = { type: 'folder', id: folder.id, name: folder.name };
-
-    menu.value = {
-        position: { x: event.clientX, y: event.clientY },
-        entries: withPasteGroup(folder.id, volumeOf(folder.id), [
-            { label: t('Open'), icon: 'o-folder-open', action: () => openFolder(folder.id) },
-            { label: t('Open in new tab'), icon: 'o-square-2-stack', action: () => openTab({ volume: volumeOf(folder.id), folderId: folder.id }) },
-            { label: t('Download as ZIP'), icon: 'o-archive-box-arrow-down', action: () => downloadZip([item]) },
-            { divider: true },
-            { label: t('Copy'), icon: 'o-document-duplicate', action: () => copyToClipboard([item]) },
-            ...(canWriteTo(volumeOf(folder.id))
-                ? [
-                    { divider: true },
-                    { label: t('Rename'), icon: 'o-pencil-square', action: () => (treeRenamingId.value = folder.id) },
-                    { label: t('Move to…'), icon: 'o-arrows-right-left', action: () => startMove([item]) },
-                    { divider: true },
-                    { label: t('Move to trash'), icon: 'o-trash', tone: 'danger', action: () => remove([item]) },
-                ]
-                : []),
-        ]),
-    };
+    menu.value = { position: { x: event.clientX, y: event.clientY }, entries: treeEntries(folder) };
 }
 
 function saveTreeRename(folder, name) {
@@ -1186,83 +1058,20 @@ function onBackgroundContextMenu(event) {
 
 // ----- Keyboard -----
 
-let typeBuffer = '';
-let typeTimer = null;
-
-function scrollToKey(key) {
-    contentPane.value?.querySelector(`[data-item-key="${key}"]`)?.scrollIntoView({ block: 'nearest' });
-}
-
-function gridColumns() {
-    const tiles = Array.from(contentPane.value?.querySelectorAll('[data-item-key]') ?? []);
-
-    return Math.max(1, tiles.filter((tile) => tile.offsetTop === tiles[0]?.offsetTop).length);
-}
-
-function moveSelection(key, extend) {
-    const keys = items.value.map(itemKey);
-
-    if (!keys.length) {
-        return;
-    }
-
-    const vertical = key === 'ArrowUp' || key === 'ArrowDown';
-
-    if (view.value.mode === 'list' && !vertical) {
-        expandWithArrow(key);
-
-        return;
-    }
-
-    const direction = key === 'ArrowUp' || key === 'ArrowLeft' ? -1 : 1;
-    const step = direction * (view.value.mode === 'grid' && vertical ? gridColumns() : 1);
-    const current = keys.indexOf([...selected.value].at(-1));
-    const next = current === -1 ? (step > 0 ? 0 : keys.length - 1) : Math.min(keys.length - 1, Math.max(0, current + step));
-    const nextKey = keys[next];
-
-    if (extend && anchorKey.value) {
-        selectRange(anchorKey.value, nextKey);
-        selected.value = new Set([...[...selected.value].filter((selectedKey) => selectedKey !== nextKey), nextKey]);
-    } else {
-        select([nextKey], nextKey);
-    }
-
-    scrollToKey(nextKey);
-}
-
-function expandWithArrow(key) {
-    const current = selectedItems.value.length === 1 ? selectedItems.value[0] : null;
-
-    if (!current) {
-        return;
-    }
-
-    if (key === 'ArrowRight' && current.type === 'folder') {
-        expand(current);
-    } else if (key === 'ArrowLeft' && current.type === 'folder' && expanded.value.has(current.id)) {
-        collapse(current);
-    } else if (key === 'ArrowLeft') {
-        const parentKey = `folder-${rowByKey.value.get(itemKey(current))?.parentId}`;
-
-        if (rowByKey.value.has(parentKey)) {
-            select([parentKey], parentKey);
-            scrollToKey(parentKey);
-        }
-    }
-}
-
-function jumpToName(character) {
-    clearTimeout(typeTimer);
-    typeBuffer += character.toLowerCase();
-    typeTimer = setTimeout(() => (typeBuffer = ''), 800);
-
-    const match = items.value.find((item) => item.name.toLowerCase().startsWith(typeBuffer));
-
-    if (match) {
-        select([itemKey(match)], itemKey(match));
-        scrollToKey(itemKey(match));
-    }
-}
+const { scrollToKey, moveSelection, jumpToName } = useSelectionKeys({
+    pane: contentPane,
+    items,
+    view,
+    selected,
+    selectedItems,
+    anchorKey,
+    expanded,
+    rowByKey,
+    select,
+    selectRange,
+    expand,
+    collapse,
+});
 
 function onKeydown(event) {
     if (trashVolume.value || menu.value || helpOpen.value || moving.value.length || renamingKey.value || treeRenamingId.value) {
