@@ -82,8 +82,8 @@ const rowClass = (volume, id) => [
 </script>
 
 <template>
-    <nav class="space-y-3 p-2" :aria-label="t('Folders')">
-        <div v-for="volume in volumes" :key="volume.key" class="space-y-0.5">
+    <nav class="divide-y divide-gray-200 p-2 dark:divide-white/10" :aria-label="t('Folders')">
+        <div v-for="volume in volumes" :key="volume.key" class="space-y-0.5 py-2 first:pt-0 last:pb-0">
             <button
                 type="button"
                 :class="rowClass(volume.key, null)"
