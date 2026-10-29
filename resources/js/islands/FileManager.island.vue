@@ -646,10 +646,11 @@ async function confirmCloudCost(action, items, targetVolume = null, targetId = n
     }
 
     return confirm({
-        title: t('Copy data on cloud storage?'),
-        message: t('This copies :count files (:size) on cloud storage, one by one. Your storage provider may charge for these operations and the transfer, and it can take a while.', { count: estimate.files, size: formatFileSize(estimate.bytes) }),
-        confirmLabel: t('Continue'),
+        title: t('This may cause high cloud costs'),
+        message: t('This copies :count files (:size) on cloud storage, one by one. Your storage provider charges for every operation and the transfer, which can get expensive quickly.', { count: estimate.files, size: formatFileSize(estimate.bytes) }),
+        confirmLabel: t('Continue anyway'),
         cancelLabel: t('Cancel'),
+        tone: 'danger',
     });
 }
 
