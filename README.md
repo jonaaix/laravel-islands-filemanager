@@ -100,6 +100,12 @@ Copying and moving between drives can be restricted with `transfer_ability`:
 'transfer_ability' => null,
 ```
 
+By default a drive is `virtual`: the file manager owns the disk, folders live in the database and
+files under hashed paths. A drive with `'mode' => 'direct'` instead shows an existing directory tree
+below its `root` and writes to it directly. Changes made outside are picked up when a folder is opened
+and by `php artisan filemanager:scan` (scheduled nightly); files renamed outside keep their notes and
+comments, recognised by inode or ETag.
+
 Thumbnails and extracted text are kept on the same disk in a hidden `.laravel-islands-filemanager` folder. Route
 prefix, middleware, OCR languages and more live in the same config file.
 

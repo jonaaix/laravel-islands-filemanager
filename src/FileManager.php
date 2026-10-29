@@ -40,7 +40,15 @@ class FileManager
         $volumes = [];
 
         foreach (config('filemanager.volumes', []) as $key => $volume) {
-            $volumes[$key] = new Volume($key, $volume['name'] ?? $key, $volume['disk'], $volume['ability'] ?? null, $volume['write_ability'] ?? null);
+            $volumes[$key] = new Volume(
+                key: $key,
+                name: $volume['name'] ?? $key,
+                disk: $volume['disk'],
+                ability: $volume['ability'] ?? null,
+                writeAbility: $volume['write_ability'] ?? null,
+                mode: $volume['mode'] ?? Volume::VIRTUAL,
+                root: $volume['root'] ?? '',
+            );
         }
 
         return $volumes;

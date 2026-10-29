@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Aaix\LaravelIslandsFilemanager;
 
 use Aaix\LaravelIslandsFilemanager\Commands\ExtractFileTextCmd;
+use Aaix\LaravelIslandsFilemanager\Commands\ScanVolumesCmd;
 use Aaix\LaravelIslandsFilemanager\Http\PageController;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
@@ -33,8 +35,14 @@ class FileManagerServiceProvider extends ServiceProvider
         $this->publishesMigrations([__DIR__.'/../database/migrations' => database_path('migrations')], 'filemanager-migrations');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExtractFileTextCmd::class]);
+            $this->commands([ExtractFileTextCmd::class, ScanVolumesCmd::class]);
         }
+
+        $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
+            if (config('filemanager.scan_schedule') !== null && collect(FileManager::volumes())->contains(fn (Volume $volume): bool => $volume->isDirect())) {
+                $schedule->command('filemanager:scan')->cron(config('filemanager.scan_schedule'))->withoutOverlapping();
+            }
+        });
 
         $this->registerRoutes();
     }

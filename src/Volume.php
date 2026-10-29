@@ -13,13 +13,29 @@ final readonly class Volume
 {
     public const string HELPER_DIRECTORY = '.laravel-islands-filemanager';
 
+    public const string VIRTUAL = 'virtual';
+
+    public const string DIRECT = 'direct';
+
     public function __construct(
         public string $key,
         public string $name,
         public string $disk,
         public ?string $ability = null,
         public ?string $writeAbility = null,
+        public string $mode = self::VIRTUAL,
+        public string $root = '',
     ) {}
+
+    public function isDirect(): bool
+    {
+        return $this->mode === self::DIRECT;
+    }
+
+    public function rootPath(string $relative = ''): string
+    {
+        return trim(implode('/', array_filter([trim($this->root, '/'), trim($relative, '/')], fn (string $part): bool => $part !== '')), '/');
+    }
 
     public function filesystem(): Filesystem
     {
@@ -43,7 +59,7 @@ final readonly class Volume
 
     public function helperPath(string $kind, string $hash, string $extension): string
     {
-        return implode('/', [self::HELPER_DIRECTORY, $kind, substr($hash, 0, 2), substr($hash, 2, 2), $hash.'.'.$extension]);
+        return $this->rootPath(implode('/', [self::HELPER_DIRECTORY, $kind, substr($hash, 0, 2), substr($hash, 2, 2), $hash.'.'.$extension]));
     }
 
     /**

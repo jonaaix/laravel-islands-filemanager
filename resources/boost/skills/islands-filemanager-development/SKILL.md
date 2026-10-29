@@ -35,9 +35,14 @@ Never copy package code into the app to change it — change the package or its 
   `ItemCopier`. A volume's `write_ability` makes it read-only for users without it, and
   `transfer_ability` guards copying/moving between volumes. Every changing endpoint checks both —
   keep that when adding one.
-- **The folder tree is virtual.** Folders exist only in the database; each file has its own hashed
-  directory, and the stored `path` is authoritative. Never build paths by hand and never move files
-  on disk when moving them inside one volume.
+- **Two modes.** A `virtual` volume (default) keeps folders in the database and files under hashed
+  directories; moving inside it never touches the disk. A `direct` volume mirrors a real directory
+  tree below its `root`: `disk_path` on folders and `path` on files are real paths, every write goes
+  through `FilePlacement`, and `DirectScanner` reconciles outside changes (on folder open and via
+  `filemanager:scan`), re-linking renamed files by `fingerprint`. Never write paths or move files by
+  hand — always through `FilePlacement`, which handles both modes and cross-volume moves.
+- **Forget, don't delete,** records whose file vanished from a direct volume: `File::forget()` drops
+  the record and its helpers without touching anything else on the disk.
 - **Helper data lives in `.laravel-islands-filemanager/`** at the root of the volume's disk (thumbnails, extracted
   text), written at upload from the uploaded file — no later download is needed, on any disk.
 - **Delete through the package.** Folder deletion must go through `FolderTree::delete()` so stored

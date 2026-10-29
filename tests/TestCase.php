@@ -27,6 +27,7 @@ abstract class TestCase extends BaseTestCase
 
         Storage::fake('filemanager');
         Storage::fake('archive');
+        Storage::fake('shared');
         Gate::define('filemanager.access', fn (User $user): bool => $user->may_use_files);
         Gate::define('filemanager.archive', fn (User $user): bool => str_starts_with($user->name, 'Member'));
     }
@@ -49,6 +50,7 @@ abstract class TestCase extends BaseTestCase
         $app['config']->set('filemanager.volumes', [
             'files' => ['name' => 'Files', 'disk' => 'filemanager'],
             'archive' => ['name' => 'Archive', 'disk' => 'archive', 'ability' => 'filemanager.archive'],
+            'shared' => ['name' => 'Shared', 'disk' => 'shared', 'mode' => 'direct', 'root' => 'Projects'],
         ]);
         $app['config']->set('filesystems.disks.archive', ['driver' => 'local', 'root' => storage_path('framework/testing/disks/archive')]);
         $app['config']->set('filemanager.page.view', 'fixtures::page');

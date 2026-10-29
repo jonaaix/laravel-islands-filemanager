@@ -6,8 +6,8 @@ namespace Aaix\LaravelIslandsFilemanager\Island\Writers;
 
 use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
+use Aaix\LaravelIslandsFilemanager\Services\FilePlacement;
 use Aaix\LaravelIslandsFilemanager\Services\FolderTree;
-use Aaix\LaravelIslandsFilemanager\Services\VolumeTransfer;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Validation\ValidationException;
 
@@ -15,7 +15,7 @@ class FolderWriter
 {
     public function __construct(
         private readonly FolderTree $tree,
-        private readonly VolumeTransfer $transfer,
+        private readonly FilePlacement $placement,
     ) {}
 
     public function create(?string $name, Location $at, Authenticatable $user, string $fallbackName = 'New folder'): Folder
@@ -23,18 +23,14 @@ class FolderWriter
         $name = filled($name) ? trim($name) : $this->tree->freeName(__($fallbackName), $at);
         $this->ensureNameIsFree($name, $at);
 
-        return Folder::query()->create([
-            'volume' => $at->volume->key,
-            'name' => $name,
-            'parent_id' => $at->folderId(),
-            'created_by_id' => $user->getAuthIdentifier(),
-        ]);
+        return $this->placement->createFolder($at, $name, $user);
     }
 
     public function rename(Folder $folder, string $name): void
     {
-        $this->ensureNameIsFree($name, new Location($folder->volume(), $folder->parent), $folder->id);
-        $folder->update(['name' => $name]);
+        $parent = new Location($folder->volume(), $folder->parent);
+        $this->ensureNameIsFree($name, $parent, $folder->id);
+        $this->placement->moveFolder($folder, $parent, $name);
     }
 
     public function move(Folder $folder, Location $target): void
@@ -44,8 +40,7 @@ class FolderWriter
         }
 
         $this->ensureNameIsFree($folder->name, $target, $folder->id);
-        $this->transfer->moveFolder($folder, $target->volume);
-        $folder->update(['parent_id' => $target->folderId()]);
+        $this->placement->moveFolder($folder, $target);
     }
 
     private function ensureNameIsFree(string $name, Location $at, ?int $exceptId = null): void

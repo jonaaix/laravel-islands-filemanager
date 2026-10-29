@@ -617,6 +617,10 @@ async function saveRename(item, name) {
     contentPane.value?.focus({ preventScroll: true });
 
     try {
+        if (item.type === 'folder' && !(await confirmCloudCost('rename', [item]))) {
+            return;
+        }
+
         const url = item.type === 'folder' ? withId(endpoints.foldersRename, item.id) : withId(endpoints.filesUpdate, item.id);
         await sendJson(url, 'PUT', { name });
         infoVersion.value++;
@@ -631,11 +635,34 @@ function cancelRename() {
     contentPane.value?.focus({ preventScroll: true });
 }
 
+const COST_NOTICE_FILES = 2;
+const COST_NOTICE_BYTES = 50 * 1024 * 1024;
+
+async function confirmCloudCost(action, items, targetVolume = null, targetId = null) {
+    const { data } = await sendJson(endpoints.itemsEstimate, 'POST', { ...toPayload(items), action, target_volume: targetVolume, target_id: targetId });
+    const estimate = data.data;
+
+    if (!estimate.remote || (estimate.files < COST_NOTICE_FILES && estimate.bytes < COST_NOTICE_BYTES)) {
+        return true;
+    }
+
+    return confirm({
+        title: t('Copy data on cloud storage?'),
+        message: t('This copies :count files (:size) on cloud storage, one by one. Your storage provider may charge for these operations and the transfer, and it can take a while.', { count: estimate.files, size: formatFileSize(estimate.bytes) }),
+        confirmLabel: t('Continue'),
+        cancelLabel: t('Cancel'),
+    });
+}
+
 async function moveTo(movedItems, targetId, targetVolume = volumeOf(targetId)) {
     const payload = toPayload(movedItems);
     payload.folders = payload.folders.filter((id) => id !== targetId);
 
     if (!payload.folders.length && !payload.files.length) {
+        return;
+    }
+
+    if (!(await confirmCloudCost('move', movedItems, targetVolume, targetId))) {
         return;
     }
 
@@ -897,6 +924,10 @@ async function paste(folderId, volume, { moving = false } = {}) {
     const payload = { ...toPayload(source.items), target_volume: volume, target_id: folderId };
 
     try {
+        if (!(await confirmCloudCost(moving ? 'move' : 'copy', source.items, volume, folderId))) {
+            return;
+        }
+
         if (moving) {
             payload.folders = payload.folders.filter((id) => id !== folderId);
             await sendJson(endpoints.itemsMove, 'PUT', payload);

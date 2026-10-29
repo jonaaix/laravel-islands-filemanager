@@ -10,6 +10,8 @@ use Illuminate\Contracts\Auth\Authenticatable;
 
 class FolderPathResolver
 {
+    public function __construct(private readonly FilePlacement $placement) {}
+
     /** @var array<string, Folder> */
     private array $resolved = [];
 
@@ -20,10 +22,9 @@ class FolderPathResolver
 
         foreach ($this->segments($relativePath) as $name) {
             $key .= '/'.$name;
-            $folder = $this->resolved[$key] ??= Folder::query()->firstOrCreate(
-                ['volume' => $base->volume->key, 'parent_id' => $folder?->id, 'name' => $name],
-                ['created_by_id' => $user->getAuthIdentifier()],
-            );
+            $parent = new Location($base->volume, $folder);
+            $folder = $this->resolved[$key] ??= Folder::query()->where('volume', $base->volume->key)->where('parent_id', $folder?->id)->where('name', $name)->first()
+                ?? $this->placement->createFolder($parent, $name, $user);
         }
 
         return new Location($base->volume, $folder);

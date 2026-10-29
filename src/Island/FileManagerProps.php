@@ -53,6 +53,7 @@ class FileManagerProps
                 'foldersRename' => $route('folders.rename', 'folder'),
                 'itemsMove' => FileManager::route('items.move'),
                 'itemsCopy' => FileManager::route('items.copy'),
+                'itemsEstimate' => FileManager::route('items.estimate'),
                 'itemsDestroy' => FileManager::route('items.destroy'),
                 'itemsZip' => FileManager::route('items.zip'),
                 'filesStore' => FileManager::route('files.store'),

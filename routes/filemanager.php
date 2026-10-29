@@ -17,6 +17,7 @@ Route::put('folders/{folder}', [Controller::class, 'renameFolder'])->name('folde
 
 Route::put('items/move', [Controller::class, 'moveItems'])->name('items.move');
 Route::post('items/copy', [Controller::class, 'copyItems'])->name('items.copy');
+Route::post('items/estimate', [Controller::class, 'estimate'])->name('items.estimate');
 Route::delete('items', [Controller::class, 'destroyItems'])->name('items.destroy');
 Route::get('items/zip', [Controller::class, 'zip'])->name('items.zip');
 

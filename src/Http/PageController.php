@@ -9,13 +9,14 @@ use Aaix\LaravelIslandsFilemanager\Island\FileManagerProps;
 use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
+use Aaix\LaravelIslandsFilemanager\Services\DirectScanner;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 
 class PageController
 {
-    public function index(Request $request, FileManagerProps $props): View
+    public function index(Request $request, FileManagerProps $props, DirectScanner $scanner): View
     {
         if (! FileManager::allows($request->user())) {
             throw new AccessDeniedHttpException;
@@ -37,7 +38,14 @@ class PageController
             'title' => __(config('filemanager.page.title')),
             'island' => 'FileManager',
             'flush' => true,
-            'islandProps' => $props->build($request->user(), new Location($volume, $folder), $file, $request->boolean('preview')),
+            'islandProps' => $props->build($request->user(), $this->scanned($scanner, new Location($volume, $folder)), $file, $request->boolean('preview')),
         ]);
+    }
+
+    private function scanned(DirectScanner $scanner, Location $at): Location
+    {
+        $scanner->scanFolder($at);
+
+        return $at;
     }
 }

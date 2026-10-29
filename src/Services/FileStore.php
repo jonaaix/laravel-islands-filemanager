@@ -18,12 +18,13 @@ class FileStore
         private readonly ThumbnailMaker $thumbnails,
         private readonly TextExtractor $extractor,
         private readonly TextIndex $index,
+        private readonly FilePlacement $placement,
+        private readonly Fingerprints $fingerprints,
     ) {}
 
     public function store(UploadedFile $upload, Location $at, Authenticatable $user): File
     {
         $name = $upload->getClientOriginalName();
-        $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION) ?: ($upload->guessExtension() ?? 'bin'));
 
         $file = File::query()->create([
             'volume' => $at->volume->key,
@@ -34,8 +35,10 @@ class FileStore
             'uploaded_by_id' => $user->getAuthIdentifier(),
         ]);
 
-        $file->mediaDisk()->putFileAs($file->mediaDirectory(), $upload, 'original.'.$extension);
-        $file->update(['path' => $file->mediaPath('original.'.$extension)]);
+        $path = $this->placement->pathForNewFile($file, $at, $name);
+        $file->mediaDisk()->putFileAs(dirname($path) === '.' ? '' : dirname($path), $upload, basename($path));
+        $file->update(['path' => $path, 'name' => $at->volume->isDirect() ? basename($path) : $name]);
+        $this->fingerprints->refresh($file);
         $local = (string) $upload->getRealPath();
         $file->update(['thumbnail_path' => $this->thumbnails->make($file, $local)]);
 

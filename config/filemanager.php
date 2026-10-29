@@ -29,10 +29,20 @@ return [
     | brings a private local disk `filemanager` (storage/app/filemanager) unless the application
     | defines one with that name. Helper data (thumbnails, extracted text) is kept on the same disk
     | in a hidden `.laravel-islands-filemanager` directory at its root.
+    |
+    | `mode` is `virtual` (default: the package owns the disk, folders live in the database, files under
+    | hashed paths) or `direct` (the drive shows the real directory tree below `root` on the disk; changes
+    | are made on the disk itself, changes from outside are picked up when a folder is opened and by the
+    | nightly `filemanager:scan`).
     */
     'volumes' => [
         'files' => ['name' => 'Files', 'disk' => env('FILEMANAGER_DISK', 'filemanager'), 'ability' => null, 'write_ability' => null],
     ],
+
+    /*
+    | When the nightly scan of `direct` drives runs (cron expression); null switches it off.
+    */
+    'scan_schedule' => '30 2 * * *',
 
     /*
     | Copying and moving between drives. Null lets everyone who may write to both drives do it.

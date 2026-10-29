@@ -15,10 +15,14 @@ use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\Comment;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
+use Aaix\LaravelIslandsFilemanager\Services\DirectScanner;
+use Aaix\LaravelIslandsFilemanager\Services\FilePlacement;
 use Aaix\LaravelIslandsFilemanager\Services\FileStore;
 use Aaix\LaravelIslandsFilemanager\Services\FolderPathResolver;
+use Aaix\LaravelIslandsFilemanager\Services\FolderTree;
 use Aaix\LaravelIslandsFilemanager\Services\ItemCopier;
 use Aaix\LaravelIslandsFilemanager\Services\ZipBuilder;
+use Aaix\LaravelIslandsFilemanager\Volume;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,11 +43,13 @@ class FileManagerController extends Controller
 
     // ----- Browsing -----
 
-    public function contents(Request $request): JsonResponse
+    public function contents(Request $request, DirectScanner $scanner): JsonResponse
     {
         $user = $this->authorizeAccess($request);
+        $location = $this->location($request, $user);
+        $scanner->scanFolder($location);
 
-        return response()->json(['data' => $this->contents->contents($this->location($request, $user), $user)]);
+        return response()->json(['data' => $this->contents->contents($location, $user)]);
     }
 
     public function search(Request $request): JsonResponse
@@ -159,6 +165,29 @@ class FileManagerController extends Controller
         return response()->json(['data' => ['moved' => $folders->count() + $files->count()]]);
     }
 
+    public function estimate(Request $request, FolderTree $tree): JsonResponse
+    {
+        $user = $this->authorizeAccess($request);
+        $validated = $request->validate(['action' => ['required', Rule::in(['move', 'copy', 'rename'])]]);
+        [$folders, $files] = $this->selectedItems($request, $user);
+        $target = $validated['action'] === 'rename' ? null : $this->location($request, $user, 'target_volume', 'target_id');
+
+        $affected = $files->concat(File::query()->whereIn('folder_id', $folders->flatMap(fn (Folder $folder) => $tree->descendantIds($folder)))->get())
+            ->filter(fn (File $file): bool => match ($validated['action']) {
+                'copy' => true,
+                'move' => $target->volume->key !== $file->getAttribute('volume') || $file->volume()->isDirect(),
+                'rename' => $file->volume()->isDirect(),
+            });
+
+        $volumes = collect([$target?->volume])->concat($folders->map->volume())->concat($files->map->volume())->filter();
+
+        return response()->json(['data' => [
+            'files' => $affected->count(),
+            'bytes' => (int) $affected->sum('size'),
+            'remote' => $volumes->contains(fn (Volume $volume): bool => ! $volume->isLocal()),
+        ]]);
+    }
+
     public function copyItems(Request $request, ItemCopier $copier): JsonResponse
     {
         $user = $this->authorizeAccess($request);
@@ -223,7 +252,7 @@ class FileManagerController extends Controller
         return response()->json(['data' => ['file' => $this->presenter->detail($file, $user)]]);
     }
 
-    public function updateFile(Request $request, File $file): JsonResponse
+    public function updateFile(Request $request, File $file, FilePlacement $placement): JsonResponse
     {
         $user = $this->authorizeAccess($request);
         $this->authorizeWrite($user, $file);
@@ -233,7 +262,13 @@ class FileManagerController extends Controller
             'notes' => ['sometimes', 'nullable', 'string', 'max:20000'],
         ]);
 
-        $file->update(array_map(fn (?string $value): ?string => $value === null ? null : trim($value), $validated));
+        if (array_key_exists('notes', $validated)) {
+            $file->update(['notes' => $validated['notes'] === null ? null : trim($validated['notes'])]);
+        }
+
+        if (isset($validated['name']) && trim($validated['name']) !== $file->name) {
+            $placement->moveFile($file, new Location($file->volume(), $file->folder), trim($validated['name']));
+        }
 
         return response()->json(['data' => ['file' => $this->presenter->detail($file, $user)]]);
     }

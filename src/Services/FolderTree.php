@@ -85,5 +85,9 @@ class FolderTree
 
         File::query()->whereIn('folder_id', $ids)->get()->each->delete();
         $folder->delete();
+
+        if ($folder->disk_path !== null && $folder->volume()->isDirect()) {
+            $folder->volume()->filesystem()->deleteDirectory($folder->disk_path);
+        }
     }
 }

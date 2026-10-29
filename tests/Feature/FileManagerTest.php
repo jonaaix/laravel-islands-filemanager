@@ -365,7 +365,7 @@ test('every volume has its own tree and contents, and a volume can ask for an ab
         ->assertJsonPath('data.folders.0.name', 'Old contracts');
 
     $this->actingAs($this->member(['name' => 'Guest']));
-    $this->getJson(route('filemanager.folders.index'))->assertJsonCount(1, 'data.volumes');
+    expect(collect($this->getJson(route('filemanager.folders.index'))->json('data.volumes'))->pluck('key')->all())->toBe(['files', 'shared']);
     $this->getJson(route('filemanager.contents', ['volume' => 'archive']))->assertNotFound();
 });
 
@@ -449,4 +449,74 @@ test('open tabs are remembered per user, without tabs that can no longer be open
     $this->get(route('filemanager.index'))->assertOk()
         ->assertSee('&quot;tabs&quot;:[{&quot;volume&quot;:&quot;files&quot;,&quot;folderId&quot;:null},{&quot;volume&quot;:&quot;files&quot;,&quot;folderId&quot;:'.$invoices->id.'}]', false)
         ->assertSee('&quot;activeTab&quot;:1', false);
+});
+
+test('a direct volume shows the real folder structure below its root and writes to it', function () {
+    $this->actingAs($this->member());
+    $disk = Storage::disk('shared');
+    $disk->put('Projects/Customer A/offer.pdf', 'offer');
+    $disk->put('Projects/Customer A/.DS_Store', 'hidden');
+    $disk->put('Elsewhere/secret.pdf', 'outside the root');
+
+    $this->getJson(route('filemanager.contents', ['volume' => 'shared']))
+        ->assertJsonCount(1, 'data.folders')
+        ->assertJsonPath('data.folders.0.name', 'Customer A');
+
+    $customer = Folder::query()->where('volume', 'shared')->sole();
+    $this->getJson(route('filemanager.contents', ['volume' => 'shared', 'folder' => $customer->id]))
+        ->assertJsonCount(1, 'data.files')
+        ->assertJsonPath('data.files.0.name', 'offer.pdf');
+
+    $this->postJson(route('filemanager.files.store'), ['volume' => 'shared', 'folder_id' => (string) $customer->id, 'files' => [UploadedFile::fake()->createWithContent('offer.pdf', 'second offer')]])->assertOk();
+    $disk->assertExists('Projects/Customer A/offer 2.pdf');
+
+    $offer = File::query()->where('path', 'Projects/Customer A/offer.pdf')->sole();
+    $this->putJson(route('filemanager.files.update', $offer), ['name' => 'Angebot.pdf'])->assertOk();
+    $disk->assertMissing('Projects/Customer A/offer.pdf');
+    $disk->assertExists('Projects/Customer A/Angebot.pdf');
+
+    $this->putJson(route('filemanager.folders.rename', $customer), ['name' => 'Kunde A'])->assertOk();
+    $disk->assertExists(['Projects/Kunde A/Angebot.pdf', 'Projects/Kunde A/offer 2.pdf']);
+    $disk->assertMissing('Projects/Customer A');
+    expect($offer->refresh()->path)->toBe('Projects/Kunde A/Angebot.pdf');
+
+    $this->deleteJson(route('filemanager.items.destroy'), ['files' => [$offer->id]])->assertOk();
+    $disk->assertMissing('Projects/Kunde A/Angebot.pdf');
+    $disk->assertExists(['Projects/Kunde A/offer 2.pdf', 'Elsewhere/secret.pdf']);
+});
+
+test('changes made outside are picked up, and a file renamed outside keeps its notes', function () {
+    $this->actingAs($this->member());
+    $disk = Storage::disk('shared');
+    $disk->put('Projects/Invoices/2026-001.pdf', 'invoice');
+    $disk->put('Projects/Invoices/2026-002.pdf', 'other invoice');
+
+    $this->artisan('filemanager:scan', ['volume' => 'shared'])->assertSuccessful();
+    $invoice = File::query()->where('name', '2026-001.pdf')->sole();
+    $invoice->update(['notes' => 'Paid']);
+
+    $disk->move('Projects/Invoices/2026-001.pdf', 'Projects/Invoices/Paid invoice.pdf');
+    $disk->delete('Projects/Invoices/2026-002.pdf');
+    $disk->put('Projects/Invoices/2026-003.pdf', 'new invoice');
+
+    $this->artisan('filemanager:scan')->assertSuccessful();
+
+    expect($invoice->refresh()->name)->toBe('Paid invoice.pdf')
+        ->and($invoice->notes)->toBe('Paid')
+        ->and(File::query()->where('volume', 'shared')->pluck('name')->sort()->values()->all())->toBe(['2026-003.pdf', 'Paid invoice.pdf']);
+    $disk->assertExists(['Projects/Invoices/Paid invoice.pdf', 'Projects/Invoices/2026-003.pdf']);
+});
+
+test('the estimate names how many files a move or copy would push through cloud storage', function () {
+    $this->actingAs($this->member());
+    $folder = Folder::query()->create(['name' => 'Big']);
+    uploadDocument($folder, 'a.pdf');
+    uploadDocument($folder, 'b.pdf');
+
+    $this->postJson(route('filemanager.items.estimate'), ['action' => 'copy', 'folders' => [$folder->id], 'target_volume' => 'archive'])
+        ->assertJsonPath('data.files', 2)
+        ->assertJsonPath('data.remote', false);
+
+    $this->postJson(route('filemanager.items.estimate'), ['action' => 'move', 'folders' => [$folder->id], 'target_volume' => 'files'])
+        ->assertJsonPath('data.files', 0);
 });

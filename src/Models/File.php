@@ -25,16 +25,30 @@ class File extends Model
 
     protected $guarded = [];
 
+    // A record forgotten after the file vanished from a real folder must not delete anything else on that disk.
+    public bool $removesOriginal = true;
+
     protected static function booted(): void
     {
         static::deleted(function (self $file): void {
-            $file->mediaDisk()->delete(array_filter([$file->thumbnail_path, $file->volume()->helperPath('text', $file->mediaHash(), 'txt')]));
+            $direct = $file->volume()->isDirect() && $file->removesOriginal;
+            $file->mediaDisk()->delete(array_values(array_filter([
+                $file->thumbnail_path,
+                $file->volume()->helperPath('text', $file->mediaHash(), 'txt'),
+                $direct ? $file->path : null,
+            ])));
         });
     }
 
     public function volume(): Volume
     {
         return FileManager::volume($this->getAttribute('volume'));
+    }
+
+    public function forget(): void
+    {
+        $this->removesOriginal = false;
+        $this->delete();
     }
 
     public function mediaDirectory(): string

@@ -18,6 +18,8 @@ class ItemCopier
     public function __construct(
         private readonly FolderTree $tree,
         private readonly TextIndex $index,
+        private readonly FilePlacement $placement,
+        private readonly Fingerprints $fingerprints,
     ) {}
 
     /**
@@ -45,12 +47,7 @@ class ItemCopier
 
     private function copyFolder(Folder $folder, Location $target, Authenticatable $user): void
     {
-        $copy = Folder::query()->create([
-            'volume' => $target->volume->key,
-            'parent_id' => $target->folderId(),
-            'name' => $this->tree->freeName($folder->name, $target),
-            'created_by_id' => $user->getAuthIdentifier(),
-        ]);
+        $copy = $this->placement->createFolder($target, $this->tree->freeName($folder->name, $target), $user);
 
         $inside = new Location($target->volume, $copy);
         $folder->children()->get()->each(fn (Folder $child) => $this->copyFolder($child, $inside, $user));
@@ -67,7 +64,8 @@ class ItemCopier
         $paths = [];
 
         if ($file->path !== null && $source->exists($file->path)) {
-            $paths['path'] = $copy->mediaPath(basename($file->path));
+            $paths['path'] = $this->placement->pathForNewFile($copy, $target, $file->name);
+            $paths['name'] = $target->volume->isDirect() ? basename($paths['path']) : $file->name;
             $destination->writeStream($paths['path'], $source->readStream($file->path));
         }
 
@@ -77,6 +75,7 @@ class ItemCopier
         }
 
         $copy->forceFill($paths)->save();
+        $this->fingerprints->refresh($copy);
 
         if ($file->content !== null) {
             $this->index->store($copy, $file->content->text);

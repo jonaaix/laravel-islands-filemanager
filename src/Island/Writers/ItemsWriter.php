@@ -7,8 +7,8 @@ namespace Aaix\LaravelIslandsFilemanager\Island\Writers;
 use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
+use Aaix\LaravelIslandsFilemanager\Services\FilePlacement;
 use Aaix\LaravelIslandsFilemanager\Services\FolderTree;
-use Aaix\LaravelIslandsFilemanager\Services\VolumeTransfer;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +18,7 @@ class ItemsWriter
     public function __construct(
         private readonly FolderWriter $folders,
         private readonly FolderTree $tree,
-        private readonly VolumeTransfer $transfer,
+        private readonly FilePlacement $placement,
     ) {}
 
     /**
@@ -29,10 +29,7 @@ class ItemsWriter
     {
         DB::transaction(function () use ($folders, $files, $target): void {
             $folders->each(fn (Folder $folder) => $this->folders->move($folder, $target));
-            $files->each(function (File $file) use ($target): void {
-                $this->transfer->moveFile($file, $target->volume);
-                $file->update(['folder_id' => $target->folderId()]);
-            });
+            $files->each(fn (File $file) => $this->placement->moveFile($file, $target));
         });
     }
 
