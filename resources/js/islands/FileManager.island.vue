@@ -20,7 +20,7 @@ import UndoBar from '../components/UndoBar.vue';
 import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, toPayload } from '../support/dragItems.js';
 import { collectDroppedFiles, fromFileInput, takeDroppedEntries } from '../support/droppedFiles.js';
-import { KEYS, hasMod, isMac, isTyping } from '../support/shortcuts.js';
+import { hasMod, isMac, isTyping } from '../support/shortcuts.js';
 import { createMenus } from '../support/menus.js';
 import { useMarquee } from '../support/marquee.js';
 import { useTabs } from '../support/tabs.js';
