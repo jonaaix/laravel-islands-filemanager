@@ -128,7 +128,7 @@ const rowClass = (volume, id) => [
             <button
                 v-if="volume.canWrite"
                 type="button"
-                class="flex min-h-7 w-full cursor-default select-none items-center gap-1.5 rounded-md pr-2 text-left text-sm"
+                class="!mt-2 flex min-h-7 w-full cursor-default select-none items-center gap-1.5 rounded-md pr-2 text-left text-sm"
                 :style="{ paddingLeft: '22px' }"
                 :class="[
                     hovered === `${volume.key}:trash` ? 'bg-primary-50 ring-2 ring-inset ring-primary-500 dark:bg-primary-500/10' : '',
@@ -140,7 +140,6 @@ const rowClass = (volume, id) => [
                 @dragleave="hovered = null"
                 @drop.stop.prevent="dropOnTrash($event, volume.key)"
             >
-                <span class="-ml-1 w-5 shrink-0"></span>
                 <Icon name="o-trash" class="h-4 w-4 shrink-0 text-gray-400" />
                 <span class="break-words py-1">{{ t('Trash') }}</span>
             </button>
