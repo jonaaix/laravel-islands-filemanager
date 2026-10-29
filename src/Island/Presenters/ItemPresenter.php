@@ -44,6 +44,8 @@ class ItemPresenter
             'mimeType' => $file->mime_type,
             'size' => (int) $file->size,
             'isImage' => $file->isImage(),
+            'width' => $file->width,
+            'height' => $file->height,
             'isPdf' => $file->isPdf(),
             'thumbnailUrl' => $file->thumbnail_path ? $route('files.thumbnail', ['v' => $file->updated_at?->timestamp]) : null,
             'url' => $route('files.content'),

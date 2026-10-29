@@ -40,7 +40,7 @@ class FileStore
         $file->update(['path' => $path, 'name' => $at->volume->isDirect() ? basename($path) : $name]);
         $this->fingerprints->refresh($file);
         $local = (string) $upload->getRealPath();
-        $file->update(['thumbnail_path' => $this->thumbnails->make($file, $local)]);
+        $file->update(['thumbnail_path' => $this->thumbnails->make($file, $local), ...$this->thumbnails->measure($file, $local)]);
 
         if (config('filemanager.extract_text')) {
             $text = $this->extractor->extract($file, $local, recognise: false);

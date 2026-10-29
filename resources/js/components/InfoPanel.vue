@@ -161,6 +161,7 @@ function onCommentKey(event) {
                 <p class="break-all font-semibold text-gray-900 dark:text-white">{{ single.name }}</p>
                 <p class="text-gray-500 dark:text-gray-400">
                     {{ single.type === 'folder' ? t('Folder') : single.extension ? t(':kind file', { kind: single.extension }) : t('File') }}
+                    <span v-if="single.width && single.height" class="tabular-nums"> · {{ single.width }} × {{ single.height }}</span>
                     · <span class="tabular-nums">{{ single.type === 'folder' ? itemCount(t, single.itemCount) : formatFileSize(single.size) }}</span>
                 </p>
             </div>

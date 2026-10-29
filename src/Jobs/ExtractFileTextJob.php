@@ -36,7 +36,7 @@ class ExtractFileTextJob implements ShouldQueue
 
         $copy->with($file, function (string $path) use ($file, $extractor, $index, $thumbnails): void {
             if ($this->withThumbnail && $file->thumbnail_path === null) {
-                $file->update(['thumbnail_path' => $thumbnails->make($file, $path)]);
+                $file->update(['thumbnail_path' => $thumbnails->make($file, $path), ...$thumbnails->measure($file, $path)]);
             }
 
             if (config('filemanager.extract_text')) {

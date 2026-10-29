@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aaix\LaravelIslandsFilemanager;
 
 use Aaix\LaravelIslandsFilemanager\Commands\ExtractFileTextCmd;
+use Aaix\LaravelIslandsFilemanager\Commands\MeasureImagesCmd;
 use Aaix\LaravelIslandsFilemanager\Commands\PurgeTrashCmd;
 use Aaix\LaravelIslandsFilemanager\Commands\ScanVolumesCmd;
 use Aaix\LaravelIslandsFilemanager\Http\PageController;
@@ -36,7 +37,7 @@ class FileManagerServiceProvider extends ServiceProvider
         $this->publishesMigrations([__DIR__.'/../database/migrations' => database_path('migrations')], 'filemanager-migrations');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExtractFileTextCmd::class, PurgeTrashCmd::class, ScanVolumesCmd::class]);
+            $this->commands([ExtractFileTextCmd::class, MeasureImagesCmd::class, PurgeTrashCmd::class, ScanVolumesCmd::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {

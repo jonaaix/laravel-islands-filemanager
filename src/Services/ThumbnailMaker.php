@@ -7,6 +7,7 @@ namespace Aaix\LaravelIslandsFilemanager\Services;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Process;
+use Imagick;
 use Intervention\Image\Drivers\Imagick\Driver;
 use Intervention\Image\Encoders\WebpEncoder;
 use Intervention\Image\ImageManager;
@@ -48,6 +49,28 @@ class ThumbnailMaker
             return null;
         } finally {
             $temporary->delete();
+        }
+    }
+
+    /**
+     * @return array{width: int, height: int}|array{}
+     */
+    public function measure(File $file, string $localSource): array
+    {
+        if (! $file->isImage()) {
+            return [];
+        }
+
+        try {
+            $image = new Imagick;
+            $image->pingImage($localSource);
+            $width = $image->getImageWidth();
+            $height = $image->getImageHeight();
+            $turned = in_array($image->getImageOrientation(), [Imagick::ORIENTATION_LEFTTOP, Imagick::ORIENTATION_RIGHTTOP, Imagick::ORIENTATION_RIGHTBOTTOM, Imagick::ORIENTATION_LEFTBOTTOM], true);
+
+            return $turned ? ['width' => $height, 'height' => $width] : ['width' => $width, 'height' => $height];
+        } catch (Throwable) {
+            return [];
         }
     }
 

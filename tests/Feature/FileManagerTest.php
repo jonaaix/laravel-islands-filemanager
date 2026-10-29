@@ -614,3 +614,13 @@ test('the trash is only open to writers and forgets items after the configured d
 
     expect(Folder::withTrashed()->pluck('name')->all())->toBe(['Recent']);
 });
+
+test('an uploaded image records its width and height', function () {
+    $this->actingAs($this->member());
+
+    $this->postJson(route('filemanager.files.store'), ['files' => [UploadedFile::fake()->image('photo.jpg', 640, 480)]])->assertOk();
+
+    $this->getJson(route('filemanager.contents'))
+        ->assertJsonPath('data.files.0.width', 640)
+        ->assertJsonPath('data.files.0.height', 480);
+});
