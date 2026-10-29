@@ -35,19 +35,23 @@ class TextExtractor
             || ($file->isImage() && $this->canRecognise());
     }
 
-    public function extract(File $file): ?string
+    public function needsRecognition(File $file): bool
     {
-        if ($file->path === null || ! $this->supports($file)) {
+        return ($file->isPdf() || $file->isImage()) && $this->canRecognise();
+    }
+
+    public function extract(File $file, string $path, bool $recognise = true): ?string
+    {
+        if (! $this->supports($file)) {
             return null;
         }
 
-        $path = $file->mediaDisk()->path($file->path);
         $extension = $this->extension($file);
 
         $text = match (true) {
-            $file->isPdf() => $this->fromPdf($path),
+            $file->isPdf() => $this->fromPdf($path, $recognise),
             isset(self::OFFICE_PARTS[$extension]) => $this->fromOfficeDocument($path, self::OFFICE_PARTS[$extension]),
-            $file->isImage() => $this->recognise($path),
+            $file->isImage() => $recognise ? $this->recognise($path) : null,
             default => (string) file_get_contents($path, length: self::MAX_PLAIN_TEXT_BYTES),
         };
 
@@ -56,13 +60,13 @@ class TextExtractor
         return $text === '' ? null : $text;
     }
 
-    private function fromPdf(string $path): ?string
+    private function fromPdf(string $path, bool $recognise): ?string
     {
         $result = Process::timeout(120)->run(['pdftotext', '-enc', 'UTF-8', '-q', $path, '-']);
         $text = $result->successful() ? $result->output() : '';
         $pages = max(1, substr_count($text, "\f"));
 
-        if (mb_strlen(trim($text)) >= self::MIN_CHARACTERS_PER_PDF_PAGE * $pages || ! $this->canRecognise()) {
+        if (mb_strlen(trim($text)) >= self::MIN_CHARACTERS_PER_PDF_PAGE * $pages || ! $recognise || ! $this->canRecognise()) {
             return $text;
         }
 

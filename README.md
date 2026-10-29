@@ -88,7 +88,18 @@ Optionally add the sources to your [Laravel Islands Search](https://github.com/j
 IslandsSearch::route('search', [FileSearchSource::class, FileContentSearchSource::class]);
 ```
 
-Route prefix, middleware, storage disk, OCR languages and more live in `config/filemanager.php`.
+Drives are Laravel disks listed under `volumes` in `config/filemanager.php`; each appears in the
+folder tree and may ask for a Gate ability of its own:
+
+```php
+'volumes' => [
+    'files' => ['name' => 'Files', 'disk' => 'filemanager'],
+    'archive' => ['name' => 'Archive', 'disk' => 's3-archive', 'ability' => 'view-archive'],
+],
+```
+
+Thumbnails and extracted text are kept on the same disk in a hidden `.filemanager` folder. Route
+prefix, middleware, OCR languages and more live in the same config file.
 
 ## License
 

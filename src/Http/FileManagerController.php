@@ -11,6 +11,7 @@ use Aaix\LaravelIslandsFilemanager\Island\State\PreferenceStore;
 use Aaix\LaravelIslandsFilemanager\Island\State\ViewSettingStore;
 use Aaix\LaravelIslandsFilemanager\Island\Writers\FolderWriter;
 use Aaix\LaravelIslandsFilemanager\Island\Writers\ItemsWriter;
+use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\Comment;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
@@ -40,21 +41,16 @@ class FileManagerController extends Controller
     public function contents(Request $request): JsonResponse
     {
         $user = $this->authorizeAccess($request);
-        $request->validate(['folder' => ['nullable', 'integer']]);
 
-        return response()->json(['data' => $this->contents->contents($this->folderOrNull($request->integer('folder') ?: null), $user)]);
+        return response()->json(['data' => $this->contents->contents($this->location($request, $user), $user)]);
     }
 
     public function search(Request $request): JsonResponse
     {
-        $this->authorizeAccess($request);
+        $user = $this->authorizeAccess($request);
+        $validated = $request->validate(['q' => ['required', 'string', 'max:255']]);
 
-        $validated = $request->validate([
-            'q' => ['required', 'string', 'max:255'],
-            'folder' => ['nullable', 'integer'],
-        ]);
-
-        return response()->json(['data' => $this->contents->search($this->folderOrNull($validated['folder'] ?? null), trim($validated['q']))]);
+        return response()->json(['data' => $this->contents->search($this->location($request, $user), trim($validated['q']))]);
     }
 
     public function saveView(Request $request, ViewSettingStore $views): JsonResponse
@@ -62,14 +58,13 @@ class FileManagerController extends Controller
         $user = $this->authorizeAccess($request);
 
         $validated = $request->validate([
-            'folder_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')],
             'mode' => ['required', Rule::in(ViewSettingStore::MODES)],
             'tile_size' => ['required', 'integer', 'between:'.ViewSettingStore::MIN_TILE.','.ViewSettingStore::MAX_TILE],
             'sort_by' => ['required', Rule::in(ViewSettingStore::SORTS)],
             'sort_direction' => ['required', Rule::in(ViewSettingStore::DIRECTIONS)],
         ]);
 
-        $views->save($user, $this->folderOrNull($validated['folder_id'] ?? null), [
+        $views->save($user, $this->location($request, $user, folderKey: 'folder_id'), [
             'mode' => $validated['mode'],
             'tile_size' => $validated['tile_size'],
             'sort_by' => $validated['sort_by'],
@@ -95,9 +90,9 @@ class FileManagerController extends Controller
 
     public function folders(Request $request): JsonResponse
     {
-        $this->authorizeAccess($request);
+        $user = $this->authorizeAccess($request);
 
-        return response()->json(['data' => ['folders' => $this->contents->tree()]]);
+        return response()->json(['data' => ['volumes' => $this->contents->tree($user)]]);
     }
 
     // ----- Folders -----
@@ -106,12 +101,9 @@ class FileManagerController extends Controller
     {
         $user = $this->authorizeAccess($request);
 
-        $validated = $request->validate([
-            'name' => ['nullable', 'string', 'max:255'],
-            'parent_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')],
-        ]);
+        $validated = $request->validate(['name' => ['nullable', 'string', 'max:255']]);
 
-        $folder = $writer->create($validated['name'] ?? null, $this->folderOrNull($validated['parent_id'] ?? null), $user);
+        $folder = $writer->create($validated['name'] ?? null, $this->location($request, $user, folderKey: 'parent_id'), $user);
 
         return response()->json(['data' => ['folder' => $this->presenter->folder($folder)]]);
     }
@@ -119,17 +111,16 @@ class FileManagerController extends Controller
     public function storeFolderWithItems(Request $request, ItemsWriter $writer): JsonResponse
     {
         $user = $this->authorizeAccess($request);
-        $validated = $request->validate(['parent_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')]]);
-        [$folders, $files] = $this->selectedItems($request);
+        [$folders, $files] = $this->selectedItems($request, $user);
 
-        $folder = $writer->moveIntoNewFolder($folders, $files, $this->folderOrNull($validated['parent_id'] ?? null), $user);
+        $folder = $writer->moveIntoNewFolder($folders, $files, $this->location($request, $user, folderKey: 'parent_id'), $user);
 
         return response()->json(['data' => ['folder' => $this->presenter->folder($folder)]]);
     }
 
     public function renameFolder(Request $request, Folder $folder, FolderWriter $writer): JsonResponse
     {
-        $this->authorizeAccess($request);
+        $this->authorizeVolume($this->authorizeAccess($request), $folder);
         $validated = $request->validate(['name' => ['required', 'string', 'max:255']]);
 
         $writer->rename($folder, trim($validated['name']));
@@ -141,18 +132,18 @@ class FileManagerController extends Controller
 
     public function moveItems(Request $request, ItemsWriter $writer): JsonResponse
     {
-        $this->authorizeAccess($request);
-        [$folders, $files] = $this->selectedItems($request);
+        $user = $this->authorizeAccess($request);
+        [$folders, $files] = $this->selectedItems($request, $user);
 
-        $writer->move($folders, $files, $this->targetFolder($request));
+        $writer->move($folders, $files, $this->location($request, $user, 'target_volume', 'target_id'));
 
         return response()->json(['data' => ['moved' => $folders->count() + $files->count()]]);
     }
 
     public function destroyItems(Request $request, ItemsWriter $writer): JsonResponse
     {
-        $this->authorizeAccess($request);
-        [$folders, $files] = $this->selectedItems($request);
+        $user = $this->authorizeAccess($request);
+        [$folders, $files] = $this->selectedItems($request, $user);
 
         $writer->delete($folders, $files);
 
@@ -161,8 +152,8 @@ class FileManagerController extends Controller
 
     public function zip(Request $request, ZipBuilder $builder): BinaryFileResponse
     {
-        $this->authorizeAccess($request);
-        [$folders, $files] = $this->selectedItems($request);
+        $user = $this->authorizeAccess($request);
+        [$folders, $files] = $this->selectedItems($request, $user);
 
         $name = $folders->count() === 1 && $files->isEmpty() ? $folders->first()->name : __('Files');
 
@@ -176,17 +167,16 @@ class FileManagerController extends Controller
         $user = $this->authorizeAccess($request);
 
         $validated = $request->validate([
-            'folder_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')],
             'files' => ['required', 'array', 'min:1', 'max:50'],
             'files.*' => ['file', 'max:'.config('filemanager.max_upload_kilobytes')],
             'paths' => ['array'],
             'paths.*' => ['nullable', 'string', 'max:1000'],
         ]);
 
-        $folder = $this->folderOrNull($validated['folder_id'] ?? null);
+        $location = $this->location($request, $user, folderKey: 'folder_id');
 
         foreach ($validated['files'] as $index => $upload) {
-            $store->store($upload, $folders->resolve($folder, $validated['paths'][$index] ?? '', $user), $user);
+            $store->store($upload, $folders->resolve($location, $validated['paths'][$index] ?? '', $user), $user);
         }
 
         return response()->json(['data' => ['uploaded' => count($validated['files'])]]);
@@ -195,6 +185,7 @@ class FileManagerController extends Controller
     public function showFile(Request $request, File $file): JsonResponse
     {
         $user = $this->authorizeAccess($request);
+        $this->authorizeVolume($user, $file);
 
         return response()->json(['data' => ['file' => $this->presenter->detail($file, $user)]]);
     }
@@ -202,6 +193,7 @@ class FileManagerController extends Controller
     public function updateFile(Request $request, File $file): JsonResponse
     {
         $user = $this->authorizeAccess($request);
+        $this->authorizeVolume($user, $file);
 
         $validated = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
@@ -215,7 +207,7 @@ class FileManagerController extends Controller
 
     public function content(Request $request, File $file): StreamedResponse
     {
-        $this->authorizeAccess($request);
+        $this->authorizeVolume($this->authorizeAccess($request), $file);
 
         return $file->mediaDisk()->response($file->path, $file->name, [
             'Content-Type' => $file->mime_type,
@@ -225,7 +217,7 @@ class FileManagerController extends Controller
 
     public function thumbnail(Request $request, File $file): StreamedResponse
     {
-        $this->authorizeAccess($request);
+        $this->authorizeVolume($this->authorizeAccess($request), $file);
 
         if ($file->thumbnail_path === null) {
             throw new NotFoundHttpException;
@@ -242,6 +234,7 @@ class FileManagerController extends Controller
     public function storeComment(Request $request, File $file): JsonResponse
     {
         $user = $this->authorizeAccess($request);
+        $this->authorizeVolume($user, $file);
         $validated = $request->validate(['body' => ['required', 'string', 'max:5000']]);
 
         $file->comments()->create(['user_id' => $user->getAuthIdentifier(), 'body' => trim($validated['body'])]);
@@ -252,6 +245,8 @@ class FileManagerController extends Controller
     public function destroyComment(Request $request, Comment $comment): JsonResponse
     {
         $user = $this->authorizeAccess($request);
+
+        $this->authorizeVolume($user, $comment->file);
 
         if ($comment->user_id !== $user->getAuthIdentifier()) {
             throw new AccessDeniedHttpException;
@@ -264,15 +259,23 @@ class FileManagerController extends Controller
 
     // ----- Support -----
 
-    private function folderOrNull(int|string|null $id): ?Folder
+    private function location(Request $request, Authenticatable $user, string $volumeKey = 'volume', string $folderKey = 'folder'): Location
     {
-        return blank($id) ? null : Folder::query()->findOrFail((int) $id);
+        $validated = $request->validate([$volumeKey => ['nullable', 'string', 'max:64'], $folderKey => ['nullable', 'integer']]);
+        $volumes = FileManager::volumesFor($user);
+        $volume = $volumes[$validated[$volumeKey] ?? array_key_first($volumes)] ?? throw new NotFoundHttpException;
+
+        if (blank($validated[$folderKey] ?? null)) {
+            return new Location($volume);
+        }
+
+        return new Location($volume, Folder::query()->where('volume', $volume->key)->findOrFail((int) $validated[$folderKey]));
     }
 
     /**
      * @return array{0: Collection<int, Folder>, 1: Collection<int, File>}
      */
-    private function selectedItems(Request $request): array
+    private function selectedItems(Request $request, Authenticatable $user): array
     {
         $validated = $request->validate([
             'folders' => ['array'],
@@ -281,8 +284,9 @@ class FileManagerController extends Controller
             'files.*' => ['integer'],
         ]);
 
-        $folders = Folder::query()->whereKey($validated['folders'] ?? [])->orderBy('name')->get();
-        $files = File::query()->whereKey($validated['files'] ?? [])->orderBy('name')->get();
+        $volumes = array_keys(FileManager::volumesFor($user));
+        $folders = Folder::query()->whereIn('volume', $volumes)->whereKey($validated['folders'] ?? [])->orderBy('name')->get();
+        $files = File::query()->whereIn('volume', $volumes)->whereKey($validated['files'] ?? [])->orderBy('name')->get();
 
         if ($folders->isEmpty() && $files->isEmpty()) {
             throw new NotFoundHttpException;
@@ -291,11 +295,11 @@ class FileManagerController extends Controller
         return [$folders, $files];
     }
 
-    private function targetFolder(Request $request): ?Folder
+    private function authorizeVolume(Authenticatable $user, File|Folder $item): void
     {
-        $validated = $request->validate(['target_id' => ['nullable', 'integer', Rule::exists(FileManager::table('folders'), 'id')]]);
-
-        return $this->folderOrNull($validated['target_id'] ?? null);
+        if (! array_key_exists($item->getAttribute('volume'), FileManager::volumesFor($user))) {
+            throw new AccessDeniedHttpException;
+        }
     }
 
     private function authorizeAccess(Request $request): Authenticatable

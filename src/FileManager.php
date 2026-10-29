@@ -32,6 +32,40 @@ class FileManager
         return $user !== null && ($ability === null || Gate::forUser($user)->allows($ability));
     }
 
+    /**
+     * @return array<string, Volume>
+     */
+    public static function volumes(): array
+    {
+        $volumes = [];
+
+        foreach (config('filemanager.volumes', []) as $key => $volume) {
+            $volumes[$key] = new Volume($key, $volume['name'] ?? $key, $volume['disk'], $volume['ability'] ?? null);
+        }
+
+        return $volumes;
+    }
+
+    public static function volume(?string $key = null): Volume
+    {
+        $volumes = self::volumes();
+
+        return $volumes[$key ?? array_key_first($volumes)] ?? throw new \InvalidArgumentException("Unknown file manager volume [{$key}].");
+    }
+
+    public static function defaultVolume(): string
+    {
+        return (string) array_key_first(self::volumes());
+    }
+
+    /**
+     * @return array<string, Volume>
+     */
+    public static function volumesFor(Authenticatable $user): array
+    {
+        return array_filter(self::volumes(), fn (Volume $volume): bool => $volume->isVisibleTo($user));
+    }
+
     public static function table(string $name): string
     {
         return config('filemanager.table_prefix', 'filemanager_').$name;

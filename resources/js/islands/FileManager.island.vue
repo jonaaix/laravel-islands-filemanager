@@ -38,7 +38,11 @@ const endpoints = props.endpoints;
 const withId = (url, id) => url.replace('__ID__', id);
 
 const contents = ref(props.initial.contents);
-const tree = ref(props.initial.tree);
+const volumes = ref(props.initial.volumes);
+const allFolders = computed(() => volumes.value.flatMap((volume) => volume.folders.map((folder) => ({ ...folder, volume: volume.key }))));
+const currentVolume = computed(() => contents.value.volume);
+const volumeOf = (folderId) => (folderId ? (allFolders.value.find((folder) => folder.id === folderId)?.volume ?? currentVolume.value) : currentVolume.value);
+const volumeName = (key) => volumes.value.find((volume) => volume.key === key)?.name ?? key;
 const view = ref({ ...props.initial.contents.view });
 const loading = ref(false);
 const uploading = ref(false);
@@ -104,7 +108,7 @@ async function runSearch() {
     }
 
     try {
-        const { data } = await httpClient.get(endpoints.search, { params: { q: term, folder: contents.value.folderId } });
+        const { data } = await httpClient.get(endpoints.search, { params: { q: term, volume: currentVolume.value, folder: contents.value.folderId } });
 
         if (request === searchRequest) {
             searchResults.value = data.data;
@@ -175,11 +179,11 @@ watch(singleFile, (file) => {
     clearTimeout(previewTimer);
     previewTimer = setTimeout(() => prefetchPreview(file), PREVIEW_PREFETCH_DELAY);
 });
-const folderName = computed(() => contents.value.path.at(-1)?.name ?? t('Files'));
+const folderName = computed(() => contents.value.path.at(-1)?.name ?? volumeName(currentVolume.value));
 const location = computed(() => {
     const row = selectedItems.value.length === 1 ? rowByKey.value.get(itemKey(selectedItems.value[0])) : null;
 
-    return [t('Files'), ...(row ? row.path : contents.value.path.map((step) => step.name))].join(' › ');
+    return [volumeName(currentVolume.value), ...(row ? row.path : contents.value.path.map((step) => step.name))].join(' › ');
 });
 const totalCount = computed(() => contents.value.folders.length + contents.value.files.length);
 
@@ -218,7 +222,7 @@ function clearSelection() {
 }
 
 function syncFileInUrl() {
-    history.replaceState(history.state, '', pageUrl(contents.value.folderId, singleFile.value?.id ?? null));
+    history.replaceState(history.state, '', pageUrl(currentVolume.value, contents.value.folderId, singleFile.value?.id ?? null));
 }
 
 // ----- Navigation -----
@@ -228,8 +232,12 @@ let historyMax = 0;
 const canGoBack = ref(false);
 const canGoForward = ref(false);
 
-function pageUrl(folderId, fileId = null) {
+function pageUrl(volume, folderId, fileId = null) {
     const url = new URL(props.pageUrl, window.location.origin);
+
+    if (volume !== volumes.value[0]?.key) {
+        url.searchParams.set('volume', volume);
+    }
 
     if (folderId) {
         url.searchParams.set('folder', folderId);
@@ -253,13 +261,13 @@ const goForward = () => history.forward();
 const PREFETCH_LIMIT = 30;
 const folderCache = new Map();
 const inflight = new Map();
-const cacheKey = (folderId) => folderId ?? 'root';
-let requestedFolderId = props.initial.contents.folderId;
+const cacheKey = (volume, folderId) => `${volume}:${folderId ?? 'root'}`;
+let requestedKey = cacheKey(props.initial.contents.volume, props.initial.contents.folderId);
 
-folderCache.set(cacheKey(requestedFolderId), props.initial.contents);
+folderCache.set(requestedKey, props.initial.contents);
 
-function fetchContents(folderId, { fresh = false } = {}) {
-    const key = cacheKey(folderId);
+function fetchContents(volume, folderId, { fresh = false } = {}) {
+    const key = cacheKey(volume, folderId);
 
     if (fresh) {
         folderCache.delete(key);
@@ -267,7 +275,7 @@ function fetchContents(folderId, { fresh = false } = {}) {
 
     if (!inflight.has(key)) {
         const request = httpClient
-            .get(endpoints.contents, { params: folderId ? { folder: folderId } : {} })
+            .get(endpoints.contents, { params: { volume, folder: folderId ?? undefined } })
             .then(({ data }) => {
                 folderCache.set(key, data.data);
 
@@ -283,9 +291,9 @@ function fetchContents(folderId, { fresh = false } = {}) {
 
 function prefetchSubfolders(level) {
     level.folders
-        .filter((folder) => !folderCache.has(folder.id))
+        .filter((folder) => !folderCache.has(cacheKey(level.volume, folder.id)))
         .slice(0, PREFETCH_LIMIT)
-        .forEach((folder) => fetchContents(folder.id).catch(() => null));
+        .forEach((folder) => fetchContents(level.volume, folder.id).catch(() => null));
 }
 
 function showContents(payload) {
@@ -293,9 +301,10 @@ function showContents(payload) {
     view.value = { ...payload.view };
 }
 
-async function load(folderId, { quiet = false } = {}) {
-    const cached = folderCache.get(cacheKey(folderId));
-    requestedFolderId = folderId;
+async function load(volume, folderId, { quiet = false } = {}) {
+    const key = cacheKey(volume, folderId);
+    const cached = folderCache.get(key);
+    requestedKey = key;
 
     if (cached && !quiet) {
         showContents(cached);
@@ -304,9 +313,9 @@ async function load(folderId, { quiet = false } = {}) {
     loading.value = !quiet && !cached;
 
     try {
-        const payload = await fetchContents(folderId, { fresh: true });
+        const payload = await fetchContents(volume, folderId, { fresh: true });
 
-        if (requestedFolderId === folderId) {
+        if (requestedKey === key) {
             showContents(payload);
         }
 
@@ -321,14 +330,14 @@ async function load(folderId, { quiet = false } = {}) {
 async function loadTree() {
     try {
         const { data } = await httpClient.get(endpoints.folders);
-        tree.value = data.data.folders;
+        volumes.value = data.data.volumes;
     } catch {
         // The tree is a shortcut; the folder view stays usable with the copy it has.
     }
 }
 
 async function fetchChildren(folderId, options = {}) {
-    const payload = await fetchContents(folderId, options);
+    const payload = await fetchContents(volumeOf(folderId), folderId, options);
 
     return { folders: payload.folders, files: payload.files };
 }
@@ -342,7 +351,7 @@ async function expand(folder) {
         return;
     }
 
-    const cached = folderCache.get(folder.id);
+    const cached = folderCache.get(cacheKey(volumeOf(folder.id), folder.id));
 
     if (cached) {
         showChildren(folder.id, { folders: cached.folders, files: cached.files });
@@ -389,11 +398,11 @@ async function reloadExpanded() {
 function refresh() {
     folderCache.clear();
 
-    return Promise.all([load(contents.value.folderId, { quiet: true }), loadTree(), reloadExpanded(), runSearch()]);
+    return Promise.all([load(currentVolume.value, contents.value.folderId, { quiet: true }), loadTree(), reloadExpanded(), runSearch()]);
 }
 
-function openFolder(folderId, selectKey = null) {
-    if (folderId === contents.value.folderId) {
+function openFolder(folderId, selectKey = null, volume = volumeOf(folderId)) {
+    if (folderId === contents.value.folderId && volume === currentVolume.value) {
         return Promise.resolve();
     }
 
@@ -401,12 +410,12 @@ function openFolder(folderId, selectKey = null) {
     expanded.value = new Set();
     historyIndex++;
     historyMax = historyIndex;
-    history.pushState({ folder: folderId, index: historyIndex }, '', pageUrl(folderId));
+    history.pushState({ volume, folder: folderId, index: historyIndex }, '', pageUrl(volume, folderId));
     updateHistoryButtons();
     selected.value = new Set(selectKey ? [selectKey] : []);
     anchorKey.value = selectKey;
 
-    return load(folderId);
+    return load(volume, folderId);
 }
 
 function openItem(item) {
@@ -433,13 +442,14 @@ function onPopState(event) {
     query.value = '';
     expanded.value = new Set();
     selected.value = new Set();
-    load(state.folder ?? null);
+    load(state.volume ?? volumes.value[0]?.key, state.folder ?? null);
 }
 
 // ----- View -----
 
 function saveView() {
     sendJson(endpoints.view, 'PUT', {
+        volume: currentVolume.value,
         folder_id: contents.value.folderId,
         mode: view.value.mode,
         tile_size: view.value.tileSize,
@@ -478,7 +488,7 @@ const modeOptions = computed(() => [
 
 async function createFolder() {
     try {
-        const { data } = await sendJson(endpoints.foldersStore, 'POST', { parent_id: contents.value.folderId });
+        const { data } = await sendJson(endpoints.foldersStore, 'POST', { volume: currentVolume.value, parent_id: contents.value.folderId });
         await refresh();
         const key = `folder-${data.data.folder.id}`;
         select([key], key);
@@ -500,7 +510,7 @@ async function createFolderWithItems(chosen) {
     const parentId = parents.size === 1 ? [...parents][0] : contents.value.folderId;
 
     try {
-        const { data } = await sendJson(endpoints.foldersStoreWithItems, 'POST', { ...toPayload(chosen), parent_id: parentId });
+        const { data } = await sendJson(endpoints.foldersStoreWithItems, 'POST', { ...toPayload(chosen), volume: currentVolume.value, parent_id: parentId });
         const key = `folder-${data.data.folder.id}`;
         query.value = '';
 
@@ -544,7 +554,7 @@ function cancelRename() {
     contentPane.value?.focus({ preventScroll: true });
 }
 
-async function moveTo(movedItems, targetId) {
+async function moveTo(movedItems, targetId, targetVolume = volumeOf(targetId)) {
     const payload = toPayload(movedItems);
     payload.folders = payload.folders.filter((id) => id !== targetId);
 
@@ -552,7 +562,7 @@ async function moveTo(movedItems, targetId) {
         return;
     }
 
-    await sendJson(endpoints.itemsMove, 'PUT', { ...payload, target_id: targetId });
+    await sendJson(endpoints.itemsMove, 'PUT', { ...payload, target_volume: targetVolume, target_id: targetId });
     clearSelection();
     toast.success(t('Moved'));
     await refresh();
@@ -563,12 +573,12 @@ function startMove(movedItems) {
     moving.value = movedItems;
 }
 
-async function submitMove(targetId) {
+async function submitMove({ volume, folderId }) {
     busy.value = true;
     moveError.value = '';
 
     try {
-        await moveTo(moving.value, targetId);
+        await moveTo(moving.value, folderId, volume);
         moving.value = [];
     } catch (error) {
         moveError.value = firstError(error, t('Could not move the items'));
@@ -605,7 +615,7 @@ async function remove(removedItems) {
         const removedStep = contents.value.path.findIndex((step) => removedFolders.has(step.id));
 
         if (removedStep !== -1) {
-            openFolder(contents.value.path[removedStep - 1]?.id ?? null);
+            openFolder(contents.value.path[removedStep - 1]?.id ?? null, null, currentVolume.value);
             await loadTree();
         } else {
             await refresh();
@@ -649,14 +659,14 @@ function chooseFolderUpload(targetId = contents.value.folderId) {
 }
 
 function onFilesChosen(event) {
-    upload(fromFileInput(event.target.files ?? []), uploadTargetId === undefined ? contents.value.folderId : uploadTargetId);
+    upload(fromFileInput(event.target.files ?? []), uploadTargetId === undefined ? contents.value.folderId : uploadTargetId, currentVolume.value);
     uploadTargetId = undefined;
     event.target.value = '';
 }
 
 const UPLOAD_BATCH = 20;
 
-async function upload(entries, targetId) {
+async function upload(entries, targetId, targetVolume = volumeOf(targetId)) {
     if (!entries.length) {
         return;
     }
@@ -673,6 +683,8 @@ async function upload(entries, targetId) {
                 form.append('paths[]', path);
             });
 
+            form.append('volume', targetVolume);
+
             if (targetId) {
                 form.append('folder_id', targetId);
             }
@@ -681,7 +693,8 @@ async function upload(entries, targetId) {
             uploadProgress.value = { done: start + batch.length, total: entries.length };
         }
 
-        const into = targetId === contents.value.folderId ? null : (tree.value.find((folder) => folder.id === targetId)?.name ?? t('Files'));
+        const isHere = targetId === contents.value.folderId && targetVolume === currentVolume.value;
+        const into = isHere ? null : (allFolders.value.find((folder) => folder.id === targetId)?.name ?? volumeName(targetVolume));
         toast.success(into ? t(':count files uploaded into :folder', { count: entries.length, folder: into }) : t(':count files uploaded', { count: entries.length }));
     } catch (error) {
         toast.danger(firstError(error, t('Could not upload the files')));
@@ -704,7 +717,7 @@ function onItemDragStart(event, item) {
     startItemsDrag(event, selectedItems.value);
 }
 
-async function dropOn(event, folderId) {
+async function dropOn(event, folderId, volume = volumeOf(folderId)) {
     filesOver.value = false;
     filesDragDepth = 0;
 
@@ -713,14 +726,14 @@ async function dropOn(event, folderId) {
         const dragged = [...payload.folders.map((id) => ({ type: 'folder', id })), ...payload.files.map((id) => ({ type: 'file', id }))];
 
         try {
-            await moveTo(dragged, folderId);
+            await moveTo(dragged, folderId, volume);
         } catch (error) {
             toast.danger(firstError(error, t('Could not move the items')));
         }
     } else if (carriesFiles(event)) {
         const entries = takeDroppedEntries(event.dataTransfer);
         const files = Array.from(event.dataTransfer.files);
-        upload(await collectDroppedFiles(entries, files), folderId);
+        upload(await collectDroppedFiles(entries, files), folderId, volume);
     }
 }
 
@@ -754,7 +767,7 @@ function onPaneDragOver(event) {
 function onPaneDrop(event) {
     if (carriesFiles(event)) {
         event.preventDefault();
-        dropOn(event, contents.value.folderId);
+        dropOn(event, contents.value.folderId, currentVolume.value);
     }
 }
 
@@ -1043,7 +1056,7 @@ onMounted(() => {
     prefetchSubfolders(contents.value);
     fitToViewport();
     window.addEventListener('resize', fitToViewport);
-    history.replaceState({ folder: contents.value.folderId, index: 0 }, '', window.location.href);
+    history.replaceState({ volume: currentVolume.value, folder: contents.value.folderId, index: 0 }, '', window.location.href);
     window.addEventListener('popstate', onPopState);
     window.addEventListener('keydown', onKeydown);
 
@@ -1084,11 +1097,11 @@ function onFileChanged(file) {
                         type="button"
                         class="inline-flex h-7 shrink-0 items-center rounded-md px-2 hover:bg-gray-100 dark:hover:bg-white/5"
                         :class="contents.path.length ? 'text-gray-600 dark:text-gray-300' : 'font-semibold text-gray-900 dark:text-white'"
-                        @click="openFolder(null)"
+                        @click="openFolder(null, null, currentVolume)"
                         @dragover="allowDrop"
-                        @drop.prevent="dropOn($event, null)"
+                        @drop.prevent="dropOn($event, null, currentVolume)"
                     >
-                        {{ t('Files') }}
+                        {{ volumeName(currentVolume) }}
                     </button>
                     <template v-for="(step, index) in contents.path" :key="step.id">
                         <Icon name="o-chevron-right" class="h-3.5 w-3.5 shrink-0 text-gray-400" />
@@ -1127,11 +1140,12 @@ function onFileChanged(file) {
                 <aside class="relative hidden shrink-0 border-r border-gray-200 bg-gray-50/70 lg:block dark:border-white/10 dark:bg-white/[0.02]" :style="{ width: `${shownTreeWidth}px` }">
                     <div class="h-full overflow-y-auto">
                         <FolderTree
-                            :folders="tree"
+                            :volumes="volumes"
+                            :current-volume="currentVolume"
                             :current-id="contents.folderId"
                             :path="contents.path"
                             :renaming-id="treeRenamingId"
-                            @open="openFolder"
+                            @open="(folderId, volume) => openFolder(folderId, null, volume)"
                             @drop="dropOn"
                             @contextmenu="onTreeContextMenu"
                             @rename-save="saveTreeRename"
@@ -1263,7 +1277,7 @@ function onFileChanged(file) {
         <input ref="folderInput" type="file" webkitdirectory class="hidden" @change="onFilesChosen" />
 
         <ContextMenu :position="menu?.position ?? null" :entries="menu?.entries ?? []" @close="menu = null" />
-        <MoveModal :open="moving.length > 0" :items="moving" :folders-url="endpoints.folders" :error="moveError" :busy="busy" @close="moving = []" @submit="submitMove" />
+        <MoveModal :open="moving.length > 0" :items="moving" :folders-url="endpoints.folders" :current-volume="currentVolume" :error="moveError" :busy="busy" @close="moving = []" @submit="submitMove" />
         <QuickLook :file="quickLookOpen ? singleFile : null" @close="quickLookOpen = false" />
         <ShortcutsHelp :open="helpOpen" @close="helpOpen = false" />
 

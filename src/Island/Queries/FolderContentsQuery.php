@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Aaix\LaravelIslandsFilemanager\Island\Queries;
 
+use Aaix\LaravelIslandsFilemanager\FileManager;
 use Aaix\LaravelIslandsFilemanager\Island\Presenters\ItemPresenter;
 use Aaix\LaravelIslandsFilemanager\Island\State\ViewSettingStore;
+use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Aaix\LaravelIslandsFilemanager\Services\FileMatcher;
 use Aaix\LaravelIslandsFilemanager\Services\FolderTree;
+use Aaix\LaravelIslandsFilemanager\Volume;
 use Illuminate\Contracts\Auth\Authenticatable;
 
 class FolderContentsQuery
@@ -24,13 +27,15 @@ class FolderContentsQuery
     /**
      * @return array<string, mixed>
      */
-    public function contents(?Folder $folder, Authenticatable $user): array
+    public function contents(Location $at, Authenticatable $user): array
     {
         return [
-            'folderId' => $folder?->id,
-            'path' => array_map(fn (Folder $step): array => ['id' => $step->id, 'name' => $step->name], $this->tree->ancestry($folder)),
+            'volume' => $at->volume->key,
+            'folderId' => $at->folderId(),
+            'path' => array_map(fn (Folder $step): array => ['id' => $step->id, 'name' => $step->name], $this->tree->ancestry($at->folder)),
             'folders' => Folder::query()
-                ->where('parent_id', $folder?->id)
+                ->where('volume', $at->volume->key)
+                ->where('parent_id', $at->folderId())
                 ->with('createdBy')
                 ->withCount(['children', 'files'])
                 ->orderBy('name')
@@ -38,26 +43,30 @@ class FolderContentsQuery
                 ->map(fn (Folder $child): array => $this->presenter->folder($child))
                 ->all(),
             'files' => File::query()
-                ->where('folder_id', $folder?->id)
+                ->where('volume', $at->volume->key)
+                ->where('folder_id', $at->folderId())
                 ->with('uploadedBy')
                 ->withCount('comments')
                 ->orderBy('name')
                 ->get()
                 ->map(fn (File $file): array => $this->presenter->file($file))
                 ->all(),
-            'view' => $this->views->for($user, $folder),
+            'view' => $this->views->for($user, $at),
         ];
     }
 
     /**
-     * @return list<array{id: int, parentId: ?int, name: string, depth: int}>
+     * @return list<array{key: string, name: string, folders: list<array{id: int, parentId: ?int, name: string, depth: int}>}>
      */
-    public function tree(): array
+    public function tree(Authenticatable $user): array
     {
-        return array_map(
-            fn (array $row): array => ['id' => $row['folder']->id, 'parentId' => $row['folder']->parent_id, 'name' => $row['folder']->name, 'depth' => $row['depth']],
-            $this->tree->flattened(),
-        );
+        return array_values(array_map(fn (Volume $volume): array => [
+            ...$volume->toArray(),
+            'folders' => array_map(
+                fn (array $row): array => ['id' => $row['folder']->id, 'parentId' => $row['folder']->parent_id, 'name' => $row['folder']->name, 'depth' => $row['depth']],
+                $this->tree->flattened($volume->key),
+            ),
+        ], FileManager::volumesFor($user)));
     }
 
     private const int SNIPPET_BEFORE = 30;
@@ -67,10 +76,11 @@ class FolderContentsQuery
     /**
      * @return array{folders: list<array<string, mixed>>, files: list<array<string, mixed>>, contentFiles: list<array<string, mixed>>}
      */
-    public function search(?Folder $within, string $query, int $limit = 200): array
+    public function search(Location $within, string $query, int $limit = 200): array
     {
         $terms = $this->matcher->terms($query);
-        $scope = $within === null ? null : $this->tree->descendantIds($within);
+        $volume = $within->volume->key;
+        $scope = $within->folder === null ? null : $this->tree->descendantIds($within->folder);
         $names = Folder::query()->pluck('name', 'id');
         $parents = Folder::query()->pluck('parent_id', 'id');
 
@@ -87,8 +97,9 @@ class FolderContentsQuery
         $folderQuery = Folder::query()->with('createdBy')->withCount(['children', 'files']);
         $this->matcher->whereFoldersMatch($folderQuery, $terms);
         $folders = $folderQuery
+            ->where('volume', $volume)
             ->when($scope, fn ($query) => $query->whereIn('parent_id', $scope))
-            ->when($within, fn ($query) => $query->whereKeyNot($within->id))
+            ->when($within->folder, fn ($query) => $query->whereKeyNot($within->folderId()))
             ->orderBy('name')
             ->limit($limit)
             ->get()
@@ -98,6 +109,7 @@ class FolderContentsQuery
         $fileQuery = File::query()->with('uploadedBy')->withCount('comments');
         $this->matcher->whereFilesMatch($fileQuery, $terms, withContent: false);
         $files = $fileQuery
+            ->where('volume', $volume)
             ->when($scope, fn ($query) => $query->whereIn('folder_id', $scope))
             ->orderBy('name')
             ->limit($limit)
@@ -110,6 +122,7 @@ class FolderContentsQuery
         $contentFiles = $contentQuery
             ->has('content')
             ->whereKeyNot(array_column($files, 'id'))
+            ->where('volume', $volume)
             ->when($scope, fn ($query) => $query->whereIn('folder_id', $scope))
             ->orderBy('name')
             ->limit($limit)

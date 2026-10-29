@@ -8,6 +8,7 @@ use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Illuminate\Support\Collection;
 use RuntimeException;
+use Spatie\TemporaryDirectory\TemporaryDirectory;
 use ZipArchive;
 
 class ZipBuilder
@@ -15,11 +16,28 @@ class ZipBuilder
     /** @var array<string, true> */
     private array $usedEntries = [];
 
+    private TemporaryDirectory $copies;
+
     /**
      * @param  Collection<int, Folder>  $folders
      * @param  Collection<int, File>  $files
      */
     public function build(Collection $folders, Collection $files): string
+    {
+        $this->copies = (new TemporaryDirectory)->create();
+
+        try {
+            return $this->write($folders, $files);
+        } finally {
+            $this->copies->delete();
+        }
+    }
+
+    /**
+     * @param  Collection<int, Folder>  $folders
+     * @param  Collection<int, File>  $files
+     */
+    private function write(Collection $folders, Collection $files): string
     {
         $path = tempnam(sys_get_temp_dir(), 'files-zip-');
         $zip = new ZipArchive;
@@ -63,7 +81,19 @@ class ZipBuilder
             return;
         }
 
-        $zip->addFile($file->mediaDisk()->path($file->path), $this->uniqueEntry($prefix.$this->clean($file->name)));
+        $zip->addFile($this->localPath($file), $this->uniqueEntry($prefix.$this->clean($file->name)));
+    }
+
+    private function localPath(File $file): string
+    {
+        if ($file->volume()->isLocal()) {
+            return $file->mediaDisk()->path($file->path);
+        }
+
+        $copy = $this->copies->path($file->mediaHash().'-'.basename($file->path));
+        file_put_contents($copy, $file->mediaDisk()->readStream($file->path));
+
+        return $copy;
     }
 
     private function uniqueEntry(string $entry): string

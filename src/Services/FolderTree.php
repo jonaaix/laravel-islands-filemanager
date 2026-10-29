@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Aaix\LaravelIslandsFilemanager\Services;
 
+use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Illuminate\Support\Collection;
@@ -28,9 +29,9 @@ class FolderTree
     /**
      * @return list<array{folder: Folder, depth: int}>
      */
-    public function flattened(): array
+    public function flattened(string $volume): array
     {
-        $byParent = Folder::query()->orderBy('name')->get()->groupBy(fn (Folder $folder): string => (string) $folder->parent_id);
+        $byParent = Folder::query()->where('volume', $volume)->orderBy('name')->get()->groupBy(fn (Folder $folder): string => (string) $folder->parent_id);
         $rows = [];
 
         $walk = function (string $parentKey, int $depth) use (&$walk, &$rows, $byParent): void {
@@ -45,9 +46,9 @@ class FolderTree
         return $rows;
     }
 
-    public function freeName(string $base, ?int $parentId): string
+    public function freeName(string $base, Location $at): string
     {
-        $taken = Folder::query()->where('parent_id', $parentId)->pluck('name')->flip();
+        $taken = Folder::query()->where('volume', $at->volume->key)->where('parent_id', $at->folderId())->pluck('name')->flip();
         $name = $base;
 
         for ($number = 2; $taken->has($name); $number++) {

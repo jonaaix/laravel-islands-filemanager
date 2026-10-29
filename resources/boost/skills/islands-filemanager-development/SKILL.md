@@ -29,9 +29,14 @@ Never copy package code into the app to change it — change the package or its 
 
 ## Rules that are easy to break
 
+- **Drives are volumes.** `filemanager.volumes` lists Laravel disks; every folder, file and view
+  setting carries its `volume`. Code works with a `Location` (volume + folder), never a bare folder id.
+  Moving to another volume copies the bytes to the other disk (`VolumeTransfer`).
 - **The folder tree is virtual.** Folders exist only in the database; each file has its own hashed
   directory, and the stored `path` is authoritative. Never build paths by hand and never move files
-  on disk when moving them in the tree.
+  on disk when moving them inside one volume.
+- **Helper data lives in `.filemanager/`** at the root of the volume's disk (thumbnails, extracted
+  text), written at upload from the uploaded file — no later download is needed, on any disk.
 - **Delete through the package.** Folder deletion must go through `FolderTree::delete()` so stored
   files are removed; deleting rows directly orphans files on disk.
 - **Text extraction is queued.** `ExtractFileTextJob` runs after each upload and needs a worker.

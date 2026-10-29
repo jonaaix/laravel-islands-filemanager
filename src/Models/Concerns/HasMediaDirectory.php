@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Aaix\LaravelIslandsFilemanager\Models\Concerns;
 
+use Aaix\LaravelIslandsFilemanager\FileManager;
 use Illuminate\Contracts\Filesystem\Filesystem;
-use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 trait HasMediaDirectory
@@ -19,10 +19,10 @@ trait HasMediaDirectory
 
     public function mediaDisk(): Filesystem
     {
-        return Storage::disk(config('filemanager.disk', 'filemanager'));
+        return FileManager::volume($this->getAttribute('volume'))->filesystem();
     }
 
-    public function mediaDirectory(): string
+    public function mediaHash(): string
     {
         $salt = config('filemanager.hash_salt');
 
@@ -30,7 +30,12 @@ trait HasMediaDirectory
             throw new RuntimeException('The file manager needs a hash salt (filemanager.hash_salt).');
         }
 
-        $hash = md5($salt.$this->getKey());
+        return md5($salt.$this->getKey());
+    }
+
+    public function mediaDirectory(): string
+    {
+        $hash = $this->mediaHash();
 
         return implode('/', [
             app()->environment(),

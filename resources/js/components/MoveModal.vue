@@ -9,26 +9,43 @@ const props = defineProps({
     open: { type: Boolean, default: false },
     items: { type: Array, default: () => [] },
     foldersUrl: { type: String, required: true },
+    currentVolume: { type: String, required: true },
     error: { type: String, default: '' },
     busy: { type: Boolean, default: false },
 });
 
 const emit = defineEmits(['close', 'submit']);
 const { t } = useTranslations();
-const folders = ref([]);
-const targetId = ref(0);
+const volumes = ref([]);
+const target = ref('');
 
-const options = computed(() => folders.value.map((folder) => ({ value: folder.id, label: folder.name, depth: folder.depth })));
+const encode = (volume, folderId) => `${volume}:${folderId ?? ''}`;
+
+// Em spaces survive HTML whitespace collapsing, so the picker shows the tree without markup of its own.
+const indent = (depth) => '\u2003'.repeat(depth);
+
+const options = computed(() => {
+    const moved = new Set(props.items.filter((item) => item.type === 'folder').map((item) => item.id));
+
+    return volumes.value.flatMap((volume) => [
+        { value: encode(volume.key, null), label: volume.name, depth: 0 },
+        ...volume.folders.filter((folder) => !moved.has(folder.id)).map((folder) => ({ value: encode(volume.key, folder.id), label: indent(folder.depth + 1) + folder.name, depth: folder.depth + 1 })),
+    ]);
+});
+
+function submit() {
+    const [volume, folderId] = target.value.split(':');
+    emit('submit', { volume, folderId: folderId ? Number(folderId) : null });
+}
 
 watch(() => props.open, async (open) => {
     if (!open) {
         return;
     }
 
-    targetId.value = 0;
+    target.value = encode(props.currentVolume, null);
     const { data } = await httpClient.get(props.foldersUrl);
-    const movedFolders = new Set(props.items.filter((item) => item.type === 'folder').map((item) => item.id));
-    folders.value = data.data.folders.filter((folder) => !movedFolders.has(folder.id));
+    volumes.value = data.data.volumes;
 });
 </script>
 
@@ -40,16 +57,15 @@ watch(() => props.open, async (open) => {
         :cancel-label="t('Cancel')"
         :submit-label="t('Move')"
         @cancel="emit('close')"
-        @submit="emit('submit', targetId || null)"
+        @submit="submit"
     >
         <FormField :label="t('Destination')" :error="error">
             <Combobox
-                v-model="targetId"
+                v-model="target"
                 :options="options"
-                :all-label="t('Files (top level)')"
-                :placeholder="t('Files (top level)')"
                 :search-placeholder="t('Search folders…')"
                 :empty-label="t('No folder found')"
+                :clear-option="false"
                 :clearable="false"
             />
         </FormField>

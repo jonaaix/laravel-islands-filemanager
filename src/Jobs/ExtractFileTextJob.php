@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Aaix\LaravelIslandsFilemanager\Jobs;
 
 use Aaix\LaravelIslandsFilemanager\Models\File;
+use Aaix\LaravelIslandsFilemanager\Services\LocalCopy;
 use Aaix\LaravelIslandsFilemanager\Services\TextExtractor;
+use Aaix\LaravelIslandsFilemanager\Services\TextIndex;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 
@@ -20,7 +22,7 @@ class ExtractFileTextJob implements ShouldQueue
 
     public function __construct(public readonly int $fileId) {}
 
-    public function handle(TextExtractor $extractor): void
+    public function handle(TextExtractor $extractor, TextIndex $index, LocalCopy $copy): void
     {
         $file = File::query()->find($this->fileId);
 
@@ -28,14 +30,6 @@ class ExtractFileTextJob implements ShouldQueue
             return;
         }
 
-        $text = $extractor->extract($file);
-
-        if ($text === null) {
-            $file->content()->delete();
-
-            return;
-        }
-
-        $file->content()->updateOrCreate([], ['text' => $text]);
+        $index->store($file, $copy->with($file, fn (string $path): ?string => $extractor->extract($file, $path)));
     }
 }

@@ -346,3 +346,41 @@ test('a dropped folder keeps its structure and merges into folders of the same n
         ->and(File::query()->where('name', 'drawing.pdf')->sole()->folder_id)->toBe($drawings->id)
         ->and(File::query()->where('name', 'loose.pdf')->sole()->folder_id)->toBeNull();
 });
+
+test('every volume has its own tree and contents, and a volume can ask for an ability of its own', function () {
+    $this->actingAs($this->member());
+    Folder::query()->create(['name' => 'Invoices']);
+    Folder::query()->create(['name' => 'Old contracts', 'volume' => 'archive']);
+
+    $this->getJson(route('filemanager.folders.index'))
+        ->assertJsonPath('data.volumes.0.key', 'files')
+        ->assertJsonPath('data.volumes.0.folders.0.name', 'Invoices')
+        ->assertJsonPath('data.volumes.1.key', 'archive')
+        ->assertJsonPath('data.volumes.1.folders.0.name', 'Old contracts');
+
+    $this->getJson(route('filemanager.contents', ['volume' => 'archive']))
+        ->assertJsonPath('data.volume', 'archive')
+        ->assertJsonCount(1, 'data.folders')
+        ->assertJsonPath('data.folders.0.name', 'Old contracts');
+
+    $this->actingAs($this->member(['name' => 'Guest']));
+    $this->getJson(route('filemanager.folders.index'))->assertJsonCount(1, 'data.volumes');
+    $this->getJson(route('filemanager.contents', ['volume' => 'archive']))->assertNotFound();
+});
+
+test('helper data lives in the hidden folder of the volume and follows a file to another volume', function () {
+    $this->actingAs($this->member());
+    $this->postJson(route('filemanager.files.store'), ['files' => [UploadedFile::fake()->image('machine.jpg', 800, 600)]])->assertOk();
+    $file = File::query()->sole();
+
+    expect($file->thumbnail_path)->toStartWith('.filemanager/thumbnails/');
+    Storage::disk('filemanager')->assertExists([$file->path, $file->thumbnail_path]);
+
+    $this->putJson(route('filemanager.items.move'), ['files' => [$file->id], 'target_volume' => 'archive'])->assertOk();
+
+    $file->refresh();
+    expect($file->getAttribute('volume'))->toBe('archive');
+    Storage::disk('archive')->assertExists([$file->path, $file->thumbnail_path]);
+    Storage::disk('filemanager')->assertMissing([$file->path, $file->thumbnail_path]);
+    $this->get(route('filemanager.files.content', $file))->assertOk();
+});

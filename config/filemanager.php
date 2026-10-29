@@ -23,13 +23,20 @@ return [
     'table_prefix' => 'filemanager_',
 
     /*
-    | Where files are stored. The package brings a private local disk of its own, `filemanager`
-    | (storage/app/filemanager), unless the application defines one with that name — point it at
-    | S3 or anywhere else there. Every file gets a directory of its own, named by an md5 of the salt
-    | and its id, so directories cannot be guessed. Never change the salt once files are stored.
+    | The drives shown in the folder tree, in this order; the first is opened by default. Each is a
+    | Laravel disk of its own and may ask for an extra Gate ability on top of `ability`. The package
+    | brings a private local disk `filemanager` (storage/app/filemanager) unless the application
+    | defines one with that name. Helper data (thumbnails, extracted text) is kept on the same disk
+    | in a hidden `.filemanager` directory at its root.
     */
-    'disk' => env('FILEMANAGER_DISK', 'filemanager'),
+    'volumes' => [
+        'files' => ['name' => 'Files', 'disk' => env('FILEMANAGER_DISK', 'filemanager'), 'ability' => null],
+    ],
 
+    /*
+    | Every file gets a directory of its own, named by an md5 of the salt and its id, so directories
+    | cannot be guessed. Never change the salt once files are stored.
+    */
     'hash_salt' => env('FILEMANAGER_HASH_SALT', env('MEDIA_HASH_SALT')),
 
     'routes' => [

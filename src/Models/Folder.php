@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aaix\LaravelIslandsFilemanager\Models;
 
 use Aaix\LaravelIslandsFilemanager\FileManager;
+use Aaix\LaravelIslandsFilemanager\Volume;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -17,6 +18,11 @@ class Folder extends Model
     }
 
     protected $guarded = [];
+
+    public function volume(): Volume
+    {
+        return FileManager::volume($this->getAttribute('volume'));
+    }
 
     public function parent(): BelongsTo
     {

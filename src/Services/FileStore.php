@@ -5,22 +5,29 @@ declare(strict_types=1);
 namespace Aaix\LaravelIslandsFilemanager\Services;
 
 use Aaix\LaravelIslandsFilemanager\Jobs\ExtractFileTextJob;
+use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\File;
-use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Http\UploadedFile;
 
 class FileStore
 {
-    public function __construct(private readonly ThumbnailMaker $thumbnails) {}
+    private const int MIN_TEXT_WITHOUT_RECOGNITION = 30;
 
-    public function store(UploadedFile $upload, ?Folder $folder, Authenticatable $user): File
+    public function __construct(
+        private readonly ThumbnailMaker $thumbnails,
+        private readonly TextExtractor $extractor,
+        private readonly TextIndex $index,
+    ) {}
+
+    public function store(UploadedFile $upload, Location $at, Authenticatable $user): File
     {
         $name = $upload->getClientOriginalName();
         $extension = strtolower(pathinfo($name, PATHINFO_EXTENSION) ?: ($upload->guessExtension() ?? 'bin'));
 
         $file = File::query()->create([
-            'folder_id' => $folder?->id,
+            'volume' => $at->volume->key,
+            'folder_id' => $at->folderId(),
             'name' => $name,
             'mime_type' => $upload->getMimeType() ?? 'application/octet-stream',
             'size' => $upload->getSize() ?: 0,
@@ -29,10 +36,16 @@ class FileStore
 
         $file->mediaDisk()->putFileAs($file->mediaDirectory(), $upload, 'original.'.$extension);
         $file->update(['path' => $file->mediaPath('original.'.$extension)]);
-        $file->update(['thumbnail_path' => $this->thumbnails->make($file)]);
+        $local = (string) $upload->getRealPath();
+        $file->update(['thumbnail_path' => $this->thumbnails->make($file, $local)]);
 
         if (config('filemanager.extract_text')) {
-            ExtractFileTextJob::dispatch($file->id);
+            $text = $this->extractor->extract($file, $local, recognise: false);
+            $this->index->store($file, $text);
+
+            if ($this->extractor->needsRecognition($file) && mb_strlen((string) $text) < self::MIN_TEXT_WITHOUT_RECOGNITION) {
+                ExtractFileTextJob::dispatch($file->id);
+            }
         }
 
         return $file;

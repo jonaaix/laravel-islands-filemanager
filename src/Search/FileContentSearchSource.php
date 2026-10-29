@@ -38,11 +38,12 @@ class FileContentSearchSource implements SearchSource
     public function search(string $query, int $limit): array
     {
         $terms = $this->matcher->terms($query);
+        $volumes = array_keys(FileManager::volumesFor(auth()->user()));
 
         $byName = File::query();
         $this->matcher->whereFilesMatch($byName, $terms, withContent: false);
 
-        $files = File::query()->with('folder')->has('content');
+        $files = File::query()->with('folder')->whereIn('volume', $volumes)->has('content');
         $this->matcher->whereFilesMatch($files, $terms, withContent: true);
 
         return $files
@@ -52,8 +53,8 @@ class FileContentSearchSource implements SearchSource
             ->get()
             ->map(fn (File $file): SearchHit => new SearchHit(
                 title: $file->name,
-                url: FileManager::route('index', ['folder' => $file->folder_id, 'file' => $file->id, 'preview' => 1]),
-                subtitle: implode(' › ', [__('Files'), ...array_map(fn (Folder $step): string => $step->name, $this->tree->ancestry($file->folder))]),
+                url: FileManager::route('index', ['volume' => $file->getAttribute('volume'), 'folder' => $file->folder_id, 'file' => $file->id, 'preview' => 1]),
+                subtitle: implode(' › ', [__($file->volume()->name), ...array_map(fn (Folder $step): string => $step->name, $this->tree->ancestry($file->folder))]),
                 icon: 'o-document-magnifying-glass',
             ))
             ->all();

@@ -6,6 +6,7 @@ namespace Aaix\LaravelIslandsFilemanager\Models;
 
 use Aaix\LaravelIslandsFilemanager\FileManager;
 use Aaix\LaravelIslandsFilemanager\Models\Concerns\HasMediaDirectory;
+use Aaix\LaravelIslandsFilemanager\Volume;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -23,6 +24,18 @@ class File extends Model
     }
 
     protected $guarded = [];
+
+    protected static function booted(): void
+    {
+        static::deleted(function (self $file): void {
+            $file->mediaDisk()->delete(array_filter([$file->thumbnail_path, $file->volume()->helperPath('text', $file->mediaHash(), 'txt')]));
+        });
+    }
+
+    public function volume(): Volume
+    {
+        return FileManager::volume($this->getAttribute('volume'));
+    }
 
     public function mediaDirectory(): string
     {

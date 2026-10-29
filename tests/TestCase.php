@@ -26,7 +26,9 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
 
         Storage::fake('filemanager');
+        Storage::fake('archive');
         Gate::define('filemanager.access', fn (User $user): bool => $user->may_use_files);
+        Gate::define('filemanager.archive', fn (User $user): bool => str_starts_with($user->name, 'Member'));
     }
 
     protected function getPackageProviders($app): array
@@ -44,6 +46,11 @@ abstract class TestCase extends BaseTestCase
     {
         $app['config']->set('auth.providers.users.model', User::class);
         $app['config']->set('filemanager.hash_salt', 'test-salt');
+        $app['config']->set('filemanager.volumes', [
+            'files' => ['name' => 'Files', 'disk' => 'filemanager'],
+            'archive' => ['name' => 'Archive', 'disk' => 'archive', 'ability' => 'filemanager.archive'],
+        ]);
+        $app['config']->set('filesystems.disks.archive', ['driver' => 'local', 'root' => storage_path('framework/testing/disks/archive')]);
         $app['config']->set('filemanager.page.view', 'fixtures::page');
         $app['config']->set('queue.default', 'sync');
         $app['view']->addNamespace('fixtures', __DIR__.'/Fixtures/views');
@@ -68,7 +75,9 @@ abstract class TestCase extends BaseTestCase
             $table->timestamps();
         });
 
-        (require __DIR__.'/../database/migrations/create_filemanager_tables.php')->up();
+        foreach (glob(__DIR__.'/../database/migrations/*.php') as $migration) {
+            (require $migration)->up();
+        }
     }
 
     protected function member(array $attributes = []): User

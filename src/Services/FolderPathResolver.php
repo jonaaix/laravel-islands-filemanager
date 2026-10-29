@@ -4,28 +4,29 @@ declare(strict_types=1);
 
 namespace Aaix\LaravelIslandsFilemanager\Services;
 
+use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Illuminate\Contracts\Auth\Authenticatable;
 
 class FolderPathResolver
 {
-    /** @var array<string, Folder|null> */
+    /** @var array<string, Folder> */
     private array $resolved = [];
 
-    public function resolve(?Folder $base, string $relativePath, Authenticatable $user): ?Folder
+    public function resolve(Location $base, string $relativePath, Authenticatable $user): Location
     {
-        $folder = $base;
-        $key = (string) $base?->id;
+        $folder = $base->folder;
+        $key = $base->volume->key.':'.$base->folderId();
 
         foreach ($this->segments($relativePath) as $name) {
             $key .= '/'.$name;
             $folder = $this->resolved[$key] ??= Folder::query()->firstOrCreate(
-                ['parent_id' => $folder?->id, 'name' => $name],
+                ['volume' => $base->volume->key, 'parent_id' => $folder?->id, 'name' => $name],
                 ['created_by_id' => $user->getAuthIdentifier()],
             );
         }
 
-        return $folder;
+        return new Location($base->volume, $folder);
     }
 
     /**

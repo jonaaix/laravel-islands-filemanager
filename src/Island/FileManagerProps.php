@@ -8,8 +8,8 @@ use Aaix\LaravelIslandsFilemanager\FileManager;
 use Aaix\LaravelIslandsFilemanager\Island\Queries\FolderContentsQuery;
 use Aaix\LaravelIslandsFilemanager\Island\State\PreferenceStore;
 use Aaix\LaravelIslandsFilemanager\Island\State\ViewSettingStore;
+use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\File;
-use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Aaix\LaravelIslandsSearch\Support\HeroiconSet;
 use Illuminate\Contracts\Auth\Authenticatable;
 
@@ -26,17 +26,17 @@ class FileManagerProps
     /**
      * @return array<string, mixed>
      */
-    public function build(Authenticatable $user, ?Folder $folder, ?File $file, bool $preview = false): array
+    public function build(Authenticatable $user, Location $at, ?File $file, bool $preview = false): array
     {
         $route = fn (string $name, string $parameter): string => FileManager::route($name, [$parameter => self::ID]);
 
         return [
             'pageUrl' => FileManager::route('index'),
             'initial' => [
-                'contents' => $this->contents->contents($folder, $user),
+                'contents' => $this->contents->contents($at, $user),
                 'fileId' => $file?->id,
                 'preview' => $file !== null && $preview,
-                'tree' => $this->contents->tree(),
+                'volumes' => $this->contents->tree($user),
             ],
             'tileSize' => ['min' => ViewSettingStore::MIN_TILE, 'max' => ViewSettingStore::MAX_TILE],
             'preferences' => $this->preferences->for($user),
@@ -63,7 +63,7 @@ class FileManagerProps
                 'o-folder', 'o-folder-plus', 'o-folder-open', 'o-document', 'o-document-text', 'o-photo', 'o-arrow-up-tray', 'o-arrow-down-tray',
                 'o-pencil-square', 'o-trash', 'o-arrows-right-left', 'o-chat-bubble-left', 'o-chevron-right', 'o-chevron-left', 'o-chevron-down',
                 'o-chevron-up', 'o-x-mark', 'o-home', 'o-arrow-top-right-on-square', 'o-paper-airplane', 'o-eye', 'o-archive-box-arrow-down',
-                'o-question-mark-circle', 'o-magnifying-glass', 'o-information-circle', 'o-ellipsis-horizontal', 'o-folder-arrow-down',
+                'o-question-mark-circle', 'o-magnifying-glass', 'o-information-circle', 'o-ellipsis-horizontal', 'o-folder-arrow-down', 'o-server-stack',
             ]),
         ];
     }

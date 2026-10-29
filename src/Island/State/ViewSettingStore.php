@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Aaix\LaravelIslandsFilemanager\Island\State;
 
-use Aaix\LaravelIslandsFilemanager\Models\Folder;
+use Aaix\LaravelIslandsFilemanager\Location;
 use Aaix\LaravelIslandsFilemanager\Models\ViewSetting;
 use Illuminate\Contracts\Auth\Authenticatable;
 
@@ -29,9 +29,9 @@ class ViewSettingStore
     /**
      * @return array{mode: string, tileSize: int, sortBy: string, sortDirection: string}
      */
-    public function for(Authenticatable $user, ?Folder $folder): array
+    public function for(Authenticatable $user, Location $at): array
     {
-        $setting = ViewSetting::query()->where('user_id', $user->getAuthIdentifier())->where('folder_id', $folder?->id)->first();
+        $setting = ViewSetting::query()->where('user_id', $user->getAuthIdentifier())->where('volume', $at->volume->key)->where('folder_id', $at->folderId())->first();
 
         return [
             'mode' => $setting->mode ?? 'list',
@@ -44,8 +44,8 @@ class ViewSettingStore
     /**
      * @param  array{mode: string, tile_size: int, sort_by: string, sort_direction: string}  $view
      */
-    public function save(Authenticatable $user, ?Folder $folder, array $view): void
+    public function save(Authenticatable $user, Location $at, array $view): void
     {
-        ViewSetting::query()->updateOrCreate(['user_id' => $user->getAuthIdentifier(), 'folder_id' => $folder?->id], $view);
+        ViewSetting::query()->updateOrCreate(['user_id' => $user->getAuthIdentifier(), 'volume' => $at->volume->key, 'folder_id' => $at->folderId()], $view);
     }
 }
