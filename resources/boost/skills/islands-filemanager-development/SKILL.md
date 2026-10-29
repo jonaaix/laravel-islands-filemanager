@@ -41,6 +41,9 @@ Never copy package code into the app to change it — change the package or its 
   through `FilePlacement`, and `DirectScanner` reconciles outside changes (on folder open and via
   `filemanager:scan`), re-linking renamed files by `fingerprint`. Never write paths or move files by
   hand — always through `FilePlacement`, which handles both modes and cross-volume moves.
+- **Moving a real folder moves the whole directory on the disk**, including files the index has not
+  seen yet (`FilePlacement::moveDirectoryInPlace`); leaving a direct volume scans the subtree first.
+  Never delete an old directory while the disk still lists files in it.
 - **Forget, don't delete,** records whose file vanished from a direct volume: `File::forget()` drops
   the record and its helpers without touching anything else on the disk.
 - **Helper data lives in `.laravel-islands-filemanager/`** at the root of the volume's disk (thumbnails, extracted

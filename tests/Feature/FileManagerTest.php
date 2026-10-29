@@ -520,3 +520,30 @@ test('the estimate names how many files a move or copy would push through cloud 
     $this->postJson(route('filemanager.items.estimate'), ['action' => 'move', 'folders' => [$folder->id], 'target_volume' => 'files'])
         ->assertJsonPath('data.files', 0);
 });
+
+test('renaming or moving a real folder takes along files the file manager has not seen yet', function () {
+    $this->actingAs($this->member());
+    $disk = Storage::disk('shared');
+    $disk->put('Projects/Customer A/offer.pdf', 'offer');
+    $disk->put('Projects/Customer A/Drawings/drawing-1.jpg', 'drawing');
+    $disk->put('Projects/Customer A/Drawings/Old/drawing-0.jpg', 'old drawing');
+
+    $this->getJson(route('filemanager.contents', ['volume' => 'shared']))->assertOk();
+    $customer = Folder::query()->where('volume', 'shared')->sole();
+
+    $this->postJson(route('filemanager.items.estimate'), ['action' => 'rename', 'folders' => [$customer->id]])->assertJsonPath('data.files', 3);
+
+    $this->putJson(route('filemanager.folders.rename', $customer), ['name' => 'Kunde A'])->assertOk();
+    $disk->assertExists(['Projects/Kunde A/offer.pdf', 'Projects/Kunde A/Drawings/drawing-1.jpg', 'Projects/Kunde A/Drawings/Old/drawing-0.jpg']);
+    $disk->assertMissing('Projects/Customer A');
+
+    $this->putJson(route('filemanager.items.move'), ['folders' => [$customer->id], 'target_volume' => 'files'])->assertOk();
+
+    expect(File::query()->where('volume', 'files')->pluck('name')->sort()->values()->all())->toBe(['drawing-0.jpg', 'drawing-1.jpg', 'offer.pdf']);
+    $disk->assertMissing('Projects/Kunde A');
+    File::query()->where('volume', 'files')->get()->each(fn (File $file) => Storage::disk('filemanager')->assertExists($file->path));
+
+    $this->putJson(route('filemanager.folders.store'), [])->assertStatus(405);
+    $disk->makeDirectory('Projects/Taken');
+    $this->postJson(route('filemanager.folders.store'), ['volume' => 'shared', 'name' => 'Taken'])->assertJsonValidationErrors('name');
+});

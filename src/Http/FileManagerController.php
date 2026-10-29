@@ -172,20 +172,59 @@ class FileManagerController extends Controller
         [$folders, $files] = $this->selectedItems($request, $user);
         $target = $validated['action'] === 'rename' ? null : $this->location($request, $user, 'target_volume', 'target_id');
 
-        $affected = $files->concat(File::query()->whereIn('folder_id', $folders->flatMap(fn (Folder $folder) => $tree->descendantIds($folder)))->get())
-            ->filter(fn (File $file): bool => match ($validated['action']) {
-                'copy' => true,
-                'move' => $target->volume->key !== $file->getAttribute('volume') || $file->volume()->isDirect(),
-                'rename' => $file->volume()->isDirect(),
-            });
+        $copiesBytes = fn (Volume $source): bool => match ($validated['action']) {
+            'copy' => true,
+            'move' => $target->volume->key !== $source->key || $source->isDirect(),
+            'rename' => $source->isDirect(),
+        };
+
+        $count = 0;
+        $bytes = 0;
+
+        foreach ($files as $file) {
+            if ($copiesBytes($file->volume())) {
+                $count++;
+                $bytes += (int) $file->size;
+            }
+        }
+
+        foreach ($folders as $folder) {
+            if (! $copiesBytes($folder->volume())) {
+                continue;
+            }
+
+            [$folderCount, $folderBytes] = $folder->volume()->isDirect()
+                ? $this->diskUsage($folder)
+                : [File::query()->whereIn('folder_id', $tree->descendantIds($folder))->count(), (int) File::query()->whereIn('folder_id', $tree->descendantIds($folder))->sum('size')];
+            $count += $folderCount;
+            $bytes += $folderBytes;
+        }
 
         $volumes = collect([$target?->volume])->concat($folders->map->volume())->concat($files->map->volume())->filter();
 
         return response()->json(['data' => [
-            'files' => $affected->count(),
-            'bytes' => (int) $affected->sum('size'),
+            'files' => $count,
+            'bytes' => $bytes,
             'remote' => $volumes->contains(fn (Volume $volume): bool => ! $volume->isLocal()),
         ]]);
+    }
+
+    /**
+     * @return array{0: int, 1: int}
+     */
+    private function diskUsage(Folder $folder): array
+    {
+        $count = 0;
+        $bytes = 0;
+
+        foreach ($folder->volume()->filesystem()->getDriver()->listContents((string) $folder->disk_path, true) as $item) {
+            if ($item->isFile() && ! str_contains($item->path(), '/.')) {
+                $count++;
+                $bytes += (int) $item->fileSize();
+            }
+        }
+
+        return [$count, $bytes];
     }
 
     public function copyItems(Request $request, ItemCopier $copier): JsonResponse

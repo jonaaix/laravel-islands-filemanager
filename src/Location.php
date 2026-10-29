@@ -23,6 +23,11 @@ final readonly class Location
         return $this->folder?->id;
     }
 
+    public function directory(): string
+    {
+        return $this->folder?->disk_path ?? $this->volume->rootPath();
+    }
+
     public function isSameVolume(string $volume): bool
     {
         return $this->volume->key === $volume;

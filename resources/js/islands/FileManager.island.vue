@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useIsland, useTranslations, useViewWidth } from '@aaix/laravel-islands/vue';
-import { ConfirmHost, Icon, IconButton, OptionStrip, Skeleton, Slider, ToastHost, provideConfirm, provideIcons, provideToasts, useConfirm, useToast } from '@aaix/laravel-islands/vue/helpers';
+import { ConfirmHost, Icon, IconButton, OptionStrip, Skeleton, Slider, ToastHost, provideConfirm, provideIcons, provideToasts } from '@aaix/laravel-islands/vue/helpers';
 import { IconModeCards, IconModeList, httpClient, sendJson } from '@aaix/laravel-islands-datagrid/vue';
 import { formatFileSize } from '../support/format.js';
 import { firstError, sendForm } from '../support/http.js';
@@ -30,11 +30,10 @@ const { t } = useTranslations();
 const { root, rootStyle } = useViewWidth({ baseWidth: EDGE_TO_EDGE });
 
 provideIcons(props.icons);
-provideToasts();
-provideConfirm();
+const toast = provideToasts();
+const confirmDialog = provideConfirm();
 
-const toast = useToast();
-const confirm = useConfirm();
+const confirm = confirmDialog.ask;
 const endpoints = props.endpoints;
 const withId = (url, id) => url.replace('__ID__', id);
 

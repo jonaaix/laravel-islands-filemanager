@@ -13,10 +13,7 @@ use Illuminate\Support\Collection;
 
 class DirectScanner
 {
-    public function __construct(
-        private readonly FilePlacement $placement,
-        private readonly Fingerprints $fingerprints,
-    ) {}
+    public function __construct(private readonly Fingerprints $fingerprints) {}
 
     public function scanFolder(Location $at): void
     {
@@ -30,9 +27,19 @@ class DirectScanner
 
     public function scanVolume(Volume $volume): int
     {
+        return $this->scanTree(new Location($volume));
+    }
+
+    public function scanTree(Location $start): int
+    {
+        if (! $start->volume->isDirect()) {
+            return 0;
+        }
+
+        $volume = $start->volume;
         $appeared = [];
         $vanished = collect();
-        $queue = [new Location($volume)];
+        $queue = [$start];
         $levels = 0;
 
         while ($at = array_shift($queue)) {
@@ -54,7 +61,7 @@ class DirectScanner
     private function syncLevel(Location $at, bool $withChildren = false): array
     {
         $disk = $at->volume->filesystem();
-        $directory = $this->placement->directoryOf($at);
+        $directory = $at->directory();
         $visible = fn (string $path): bool => ! str_starts_with(basename($path), '.');
 
         $diskFolders = array_values(array_filter($disk->directories($directory), $visible));

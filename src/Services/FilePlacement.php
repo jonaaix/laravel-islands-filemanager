@@ -12,16 +12,14 @@ use Illuminate\Contracts\Auth\Authenticatable;
 
 class FilePlacement
 {
-    public function __construct(private readonly Fingerprints $fingerprints) {}
-
-    public function directoryOf(Location $at): string
-    {
-        return $at->folder?->disk_path ?? $at->volume->rootPath();
-    }
+    public function __construct(
+        private readonly Fingerprints $fingerprints,
+        private readonly DirectScanner $scanner,
+    ) {}
 
     public function createFolder(Location $parent, string $name, ?Authenticatable $user): Folder
     {
-        $diskPath = $parent->volume->isDirect() ? $this->join($this->directoryOf($parent), $name) : null;
+        $diskPath = $parent->volume->isDirect() ? $this->join($parent->directory(), $name) : null;
 
         if ($diskPath !== null) {
             $parent->volume->filesystem()->makeDirectory($diskPath);
@@ -47,7 +45,7 @@ class FilePlacement
 
     public function freeFilePath(Location $at, string $name, ?int $exceptFileId = null): string
     {
-        $directory = $this->directoryOf($at);
+        $directory = $at->directory();
         $disk = $at->volume->filesystem();
         $extension = pathinfo($name, PATHINFO_EXTENSION);
         $base = $extension === '' ? $name : substr($name, 0, -strlen($extension) - 1);
@@ -82,30 +80,72 @@ class FilePlacement
     public function moveFolder(Folder $folder, Location $target, ?string $newName = null): void
     {
         $from = $folder->volume();
-        $oldDiskPath = $folder->disk_path;
+        $name = $newName ?? $folder->name;
 
         if ($from->key === $target->volume->key && ! $from->isDirect()) {
-            $folder->update(['parent_id' => $target->folderId(), 'name' => $newName ?? $folder->name]);
+            $folder->update(['parent_id' => $target->folderId(), 'name' => $name]);
 
             return;
         }
 
-        $folder->update([
-            'volume' => $target->volume->key,
-            'parent_id' => $target->folderId(),
-            'name' => $newName ?? $folder->name,
-        ]);
+        if ($from->key === $target->volume->key) {
+            $this->moveDirectoryInPlace($folder, $target, $name);
 
+            return;
+        }
+
+        // Files that exist only on the disk would be left behind otherwise; every one needs a record first.
+        $this->scanner->scanTree(Location::of($folder));
+        $oldDiskPath = $folder->refresh()->disk_path;
+
+        $folder->update(['volume' => $target->volume->key, 'parent_id' => $target->folderId(), 'name' => $name]);
         $this->relocateTree($folder, $target->volume);
 
-        if ($from->isDirect() && $oldDiskPath !== null && $oldDiskPath !== $folder->refresh()->disk_path) {
+        if ($from->isDirect() && $oldDiskPath !== null && $from->filesystem()->allFiles($oldDiskPath) === []) {
             $from->filesystem()->deleteDirectory($oldDiskPath);
         }
     }
 
+    private function moveDirectoryInPlace(Folder $folder, Location $target, string $name): void
+    {
+        $disk = $target->volume->filesystem();
+        $oldPrefix = (string) $folder->disk_path;
+        $newPrefix = $this->join($target->directory(), $name);
+
+        if ($oldPrefix !== $newPrefix) {
+            foreach ($disk->allDirectories($oldPrefix) as $directory) {
+                $disk->makeDirectory($newPrefix.substr($directory, strlen($oldPrefix)));
+            }
+
+            $disk->makeDirectory($newPrefix);
+
+            foreach ($disk->allFiles($oldPrefix) as $path) {
+                $disk->move($path, $newPrefix.substr($path, strlen($oldPrefix)));
+            }
+
+            if ($disk->allFiles($oldPrefix) === []) {
+                $disk->deleteDirectory($oldPrefix);
+            }
+        }
+
+        $folder->update(['parent_id' => $target->folderId(), 'name' => $name]);
+        $this->rewritePrefix($folder, $oldPrefix, $newPrefix);
+    }
+
+    private function rewritePrefix(Folder $folder, string $oldPrefix, string $newPrefix): void
+    {
+        $folder->update(['disk_path' => $newPrefix.substr((string) $folder->disk_path, strlen($oldPrefix))]);
+
+        $folder->files()->get()->each(fn (File $file) => $file->update([
+            'path' => $newPrefix.substr((string) $file->path, strlen($oldPrefix)),
+        ]));
+
+        $folder->children()->get()->each(fn (Folder $child) => $this->rewritePrefix($child, $oldPrefix, $newPrefix));
+    }
+
     private function relocateTree(Folder $folder, Volume $volume): void
     {
-        $diskPath = $volume->isDirect() ? $this->join($this->directoryOf(new Location($volume, $folder->parent()->first())), $folder->name) : null;
+        $diskPath = $volume->isDirect() ? $this->join((new Location($volume, $folder->parent()->first()))->directory(), $folder->name) : null;
         $folder->update(['volume' => $volume->key, 'disk_path' => $diskPath]);
 
         if ($diskPath !== null) {

@@ -52,7 +52,10 @@ class FolderWriter
             ->when($exceptId, fn ($query) => $query->whereKeyNot($exceptId))
             ->exists();
 
-        if ($taken) {
+        $takenOnDisk = $at->volume->isDirect() && $at->volume->filesystem()->directoryExists(ltrim($at->directory().'/'.$name, '/'));
+        $isItself = $exceptId !== null && Folder::query()->whereKey($exceptId)->value('disk_path') === ltrim($at->directory().'/'.$name, '/');
+
+        if ($taken || ($takenOnDisk && ! $isItself)) {
             throw ValidationException::withMessages(['name' => __('A folder with this name already exists here.')]);
         }
     }
