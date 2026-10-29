@@ -20,6 +20,7 @@ import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, toPayload } from '../support/dragItems.js';
 import { collectDroppedFiles, fromFileInput, takeDroppedEntries } from '../support/droppedFiles.js';
 import { KEYS, hasMod, isMac, isTyping } from '../support/shortcuts.js';
+import { useMarquee } from '../support/marquee.js';
 import { sortItems } from '../support/sorting.js';
 
 // The Files window fills the whole content area, however wide the screen.
@@ -299,6 +300,12 @@ function selectRange(fromKey, toKey) {
 function clearSelection() {
     select([]);
 }
+
+const { box: marqueeBox, start: startMarquee, consumeClick: marqueeConsumedClick } = useMarquee(contentPane, {
+    canStart: () => !trashVolume.value && !renamingKey.value && !loading.value,
+    currentKeys: () => [...selected.value],
+    onChange: (keys, anchor) => select(keys, anchor ?? anchorKey.value),
+});
 
 function syncFileInUrl() {
     history.replaceState(history.state, '', pageUrl(currentVolume.value, contents.value.folderId, singleFile.value?.id ?? null));
@@ -1463,13 +1470,20 @@ function onFileChanged(file) {
                     tabindex="0"
                     class="relative min-w-0 flex-1 overflow-y-auto outline-none"
                     :class="filesOver ? 'bg-primary-50/50 ring-2 ring-inset ring-primary-500 dark:bg-primary-500/10' : ''"
-                    @click="clearSelection"
+                    @mousedown="startMarquee"
+                    @click="marqueeConsumedClick() || clearSelection()"
                     @contextmenu.prevent="trashVolume || onBackgroundContextMenu($event)"
                     @dragenter="trashVolume || onPaneDragEnter($event)"
                     @dragleave="trashVolume || onPaneDragLeave($event)"
                     @dragover="trashVolume || onPaneDragOver($event)"
                     @drop="trashVolume || onPaneDrop($event)"
                 >
+                    <div
+                        v-if="marqueeBox"
+                        class="pointer-events-none absolute z-10 rounded-sm border border-primary-500 bg-primary-500/10"
+                        :style="{ left: `${marqueeBox.left}px`, top: `${marqueeBox.top}px`, width: `${marqueeBox.width}px`, height: `${marqueeBox.height}px` }"
+                    ></div>
+
                     <TrashView
                         v-if="trashVolume"
                         :volume="trashVolume"
