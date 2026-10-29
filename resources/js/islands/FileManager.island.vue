@@ -1292,6 +1292,8 @@ function onFileChanged(file) {
 <template>
     <div ref="root" class="island-view files w-full" :style="rootStyle">
         <section class="flex flex-col overflow-hidden bg-white dark:bg-zinc-800" :style="{ height: windowHeight, minHeight: '480px' }">
+            <TabBar v-if="tabs.length > 1" :tabs="tabs" :active="activeTab" :label-of="tabLabel" @select="switchTab" @close="closeTab" @add="openTab()" @drop="dropOnTab" />
+
             <div class="flex h-12 shrink-0 items-center gap-2 border-b border-gray-200 px-3 dark:border-white/10">
                 <div class="flex items-center">
                     <IconButton :label="t('Back')" size="sm" :disabled="!canGoBack" @click="goBack"><Icon name="o-chevron-left" /></IconButton>
@@ -1341,8 +1343,6 @@ function onFileChanged(file) {
                     />
                 </label>
             </div>
-
-            <TabBar v-if="tabs.length > 1" :tabs="tabs" :active="activeTab" :label-of="tabLabel" @select="switchTab" @close="closeTab" @add="openTab()" @drop="dropOnTab" />
 
             <div class="flex min-h-0 flex-1">
                 <aside class="relative hidden shrink-0 border-r border-gray-200 bg-gray-50/70 lg:block dark:border-white/10 dark:bg-white/[0.02]" :style="{ width: `${shownTreeWidth}px` }">
