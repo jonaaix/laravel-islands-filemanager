@@ -21,6 +21,8 @@ A file manager as one Laravel Islands page: several drives, tabs, folder tree, l
 views, notes and comments, previews, keyboard shortcuts, copy and paste, a trash, folder uploads and full-text search — including Office
 files and scanned documents.
 
+![Laravel Islands File Manager](https://raw.githubusercontent.com/jonaaix/laravel-islands-filemanager/main/art/screenshot.png)
+
 ## Requirements
 
 - PHP 8.3+, Laravel 12 or 13, a queue worker
