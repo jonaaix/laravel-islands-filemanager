@@ -864,7 +864,7 @@ function onItemDragStart(event, item) {
         select([key], key);
     }
 
-    startItemsDrag(event, selectedItems.value);
+    startItemsDrag(event, [item, ...selectedItems.value.filter((other) => itemKey(other) !== key)]);
 }
 
 async function dropOn(event, folderId, volume = volumeOf(folderId)) {
