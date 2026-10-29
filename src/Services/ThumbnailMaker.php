@@ -53,9 +53,9 @@ class ThumbnailMaker
     }
 
     /**
-     * @return array{width: int, height: int}|array{}
+     * @return array{width?: int, height?: int, taken_at?: string, camera?: string}
      */
-    public function measure(File $file, string $localSource): array
+    public function inspect(File $file, string $localSource): array
     {
         if (! $file->isImage()) {
             return [];
@@ -64,14 +64,44 @@ class ThumbnailMaker
         try {
             $image = new Imagick;
             $image->pingImage($localSource);
-            $width = $image->getImageWidth();
-            $height = $image->getImageHeight();
-            $turned = in_array($image->getImageOrientation(), [Imagick::ORIENTATION_LEFTTOP, Imagick::ORIENTATION_RIGHTTOP, Imagick::ORIENTATION_RIGHTBOTTOM, Imagick::ORIENTATION_LEFTBOTTOM], true);
-
-            return $turned ? ['width' => $height, 'height' => $width] : ['width' => $width, 'height' => $height];
         } catch (Throwable) {
             return [];
         }
+
+        $width = $image->getImageWidth();
+        $height = $image->getImageHeight();
+        $turned = in_array($image->getImageOrientation(), [Imagick::ORIENTATION_LEFTTOP, Imagick::ORIENTATION_RIGHTTOP, Imagick::ORIENTATION_RIGHTBOTTOM, Imagick::ORIENTATION_LEFTBOTTOM], true);
+        $exif = $image->getImageProperties('exif:*');
+
+        return array_filter([
+            'width' => $turned ? $height : $width,
+            'height' => $turned ? $width : $height,
+            'taken_at' => $this->takenAt($exif['exif:DateTimeOriginal'] ?? $exif['exif:DateTime'] ?? null, $exif['exif:OffsetTimeOriginal'] ?? null),
+            'camera' => $this->camera($exif['exif:Make'] ?? null, $exif['exif:Model'] ?? null),
+        ], fn (mixed $value): bool => $value !== null && $value !== '');
+    }
+
+    private function takenAt(?string $stamp, ?string $offset): ?string
+    {
+        if ($stamp === null || preg_match('/^(\d{4}):(\d{2}):(\d{2}) (\d{2}:\d{2}:\d{2})/', trim($stamp), $parts) !== 1 || $parts[1] === '0000') {
+            return null;
+        }
+
+        $offset = $offset !== null && preg_match('/^[+-]\d{2}:\d{2}$/', trim($offset)) === 1 ? trim($offset) : '';
+
+        return "{$parts[1]}-{$parts[2]}-{$parts[3]}T{$parts[4]}{$offset}";
+    }
+
+    private function camera(?string $make, ?string $model): ?string
+    {
+        $make = trim((string) $make);
+        $model = trim((string) $model);
+
+        if ($model === '') {
+            return $make === '' ? null : $make;
+        }
+
+        return $make === '' || str_starts_with(mb_strtolower($model), mb_strtolower(strtok($make, ' '))) ? $model : "{$make} {$model}";
     }
 
     private function firstPdfPage(string $pdf, TemporaryDirectory $temporary): ?string

@@ -624,3 +624,15 @@ test('an uploaded image records its width and height', function () {
         ->assertJsonPath('data.files.0.width', 640)
         ->assertJsonPath('data.files.0.height', 480);
 });
+
+test('an uploaded photo records when and with which camera it was taken', function () {
+    $this->actingAs($this->member());
+    $photo = new UploadedFile(__DIR__.'/../Fixtures/camera.jpg', 'holiday.jpg', 'image/jpeg', null, true);
+
+    $this->postJson(route('filemanager.files.store'), ['files' => [$photo]])->assertOk();
+
+    $this->getJson(route('filemanager.contents'))
+        ->assertJsonPath('data.files.0.takenAt', '2026-10-12T14:03:22+02:00')
+        ->assertJsonPath('data.files.0.camera', 'Canon EOS R6')
+        ->assertJsonPath('data.files.0.width', 64);
+});

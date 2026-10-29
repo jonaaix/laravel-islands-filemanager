@@ -186,6 +186,14 @@ function onCommentKey(event) {
                             <dd><PersonChip :name="detail.uploadedBy" :image="single.ownerAvatar" /></dd>
                         </template>
                     </template>
+                    <template v-if="file?.takenAt">
+                        <dt class="text-gray-500 dark:text-gray-400">{{ t('Taken') }}</dt>
+                        <dd class="tabular-nums text-gray-900 dark:text-white">{{ formatDayAndTime(file.takenAt) }}</dd>
+                    </template>
+                    <template v-if="file?.camera">
+                        <dt class="text-gray-500 dark:text-gray-400">{{ t('Camera') }}</dt>
+                        <dd class="text-gray-900 dark:text-white">{{ file.camera }}</dd>
+                    </template>
                     <dt class="text-gray-500 dark:text-gray-400">{{ t('Modified') }}</dt>
                     <dd class="text-gray-900 dark:text-white">{{ formatDayAndTime(single.updatedAt) }}</dd>
                     <dt class="text-gray-500 dark:text-gray-400">{{ t('Where') }}</dt>

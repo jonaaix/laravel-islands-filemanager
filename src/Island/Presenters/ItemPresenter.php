@@ -46,6 +46,8 @@ class ItemPresenter
             'isImage' => $file->isImage(),
             'width' => $file->width,
             'height' => $file->height,
+            'takenAt' => $file->taken_at,
+            'camera' => $file->camera,
             'isPdf' => $file->isPdf(),
             'thumbnailUrl' => $file->thumbnail_path ? $route('files.thumbnail', ['v' => $file->updated_at?->timestamp]) : null,
             'url' => $route('files.content'),
