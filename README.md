@@ -93,3 +93,4 @@ Route prefix, middleware, storage disk, OCR languages and more live in `config/f
 ## License
 
 The MIT License (MIT). See [LICENSE](LICENSE.md) for more information.
+
