@@ -2,32 +2,32 @@ export const ITEMS_MIME = 'application/x-files-items';
 
 export const itemKey = (item) => `${item.type}-${item.id}`;
 
+const PREVIEW_ROWS = 5;
+
 export function startItemsDrag(event, items) {
     event.dataTransfer.effectAllowed = 'move';
     event.dataTransfer.setData(ITEMS_MIME, JSON.stringify(toPayload(items)));
 
     const preview = dragPreview(items);
     document.body.appendChild(preview);
-    event.dataTransfer.setDragImage(preview, 14, 14);
+    event.dataTransfer.setDragImage(preview, items.length > 1 ? 11 : 14, items.length > 1 ? 11 : 14);
     setTimeout(() => preview.remove(), 0);
 }
 
 function dragPreview(items) {
     const preview = document.createElement('div');
-    preview.className = 'fixed -left-[9999px] top-0 flex max-w-72 items-center gap-2 rounded-md bg-primary-600 px-2.5 py-1 text-sm font-medium text-white shadow-lg';
+    preview.className = items.length > 1 ? 'fixed -left-[9999px] top-0 flex flex-col items-start gap-1 pl-3 pt-3' : 'fixed -left-[9999px] top-0 flex';
 
-    if (items.length > 1) {
-        preview.style.boxShadow = '4px 4px 0 -1px var(--color-primary-300), 0 10px 15px -3px rgb(0 0 0 / 0.1)';
-    }
-
-    const name = document.createElement('span');
-    name.className = 'truncate';
-    name.textContent = items[0]?.name ?? '';
-    preview.appendChild(name);
+    items.slice(0, PREVIEW_ROWS).forEach((item) => {
+        const row = document.createElement('span');
+        row.className = 'max-w-72 truncate rounded-md bg-primary-600 px-2.5 py-1 text-sm font-medium text-white shadow-md';
+        row.textContent = item.name ?? '';
+        preview.appendChild(row);
+    });
 
     if (items.length > 1) {
         const count = document.createElement('span');
-        count.className = 'shrink-0 rounded-full bg-white px-1.5 text-xs font-semibold tabular-nums text-primary-700';
+        count.className = 'absolute left-0 top-0 flex h-[22px] min-w-[22px] items-center justify-center rounded-full bg-gray-900 px-1.5 text-xs font-semibold tabular-nums text-white ring-2 ring-white';
         count.textContent = String(items.length);
         preview.appendChild(count);
     }
