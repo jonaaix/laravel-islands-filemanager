@@ -161,9 +161,13 @@ class FileManagerController extends Controller
 
         $target = $this->location($request, $user, 'target_volume', 'target_id');
         $this->authorizeTransfer($user, $folders, $files, $target);
+        $origins = [
+            ...$folders->map(fn (Folder $folder): array => ['type' => 'folder', 'id' => $folder->id, 'volume' => $folder->getAttribute('volume'), 'folderId' => $folder->parent_id]),
+            ...$files->map(fn (File $file): array => ['type' => 'file', 'id' => $file->id, 'volume' => $file->getAttribute('volume'), 'folderId' => $file->folder_id]),
+        ];
         $writer->move($folders, $files, $target);
 
-        return response()->json(['data' => ['moved' => $folders->count() + $files->count()]]);
+        return response()->json(['data' => ['moved' => $folders->count() + $files->count(), 'origins' => $origins]]);
     }
 
     public function estimate(Request $request, FolderTree $tree): JsonResponse
@@ -235,9 +239,9 @@ class FileManagerController extends Controller
         $target = $this->location($request, $user, 'target_volume', 'target_id');
         $this->authorizeTransfer($user, $folders, $files, $target, copying: true);
 
-        $copier->copy($folders, $files, $target, $user);
+        $copies = $copier->copy($folders, $files, $target, $user);
 
-        return response()->json(['data' => ['copied' => $folders->count() + $files->count()]]);
+        return response()->json(['data' => ['copied' => $folders->count() + $files->count(), 'copies' => $copies]]);
     }
 
     public function destroyItems(Request $request, Trash $trash): JsonResponse

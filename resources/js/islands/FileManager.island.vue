@@ -16,6 +16,7 @@ import QuickLook from '../components/QuickLook.vue';
 import ShortcutsHelp from '../components/ShortcutsHelp.vue';
 import TabBar from '../components/TabBar.vue';
 import TrashView from '../components/TrashView.vue';
+import UndoBar from '../components/UndoBar.vue';
 import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, toPayload } from '../support/dragItems.js';
 import { collectDroppedFiles, fromFileInput, takeDroppedEntries } from '../support/droppedFiles.js';
@@ -671,7 +672,13 @@ async function saveRename(item, name) {
         }
 
         const url = item.type === 'folder' ? withId(endpoints.foldersRename, item.id) : withId(endpoints.filesUpdate, item.id);
+        const previousName = item.name;
         await sendJson(url, 'PUT', { name });
+
+        if (name.trim() !== previousName) {
+            offerUndo(t('Renamed to :name', { name: name.trim() }), () => sendJson(url, 'PUT', { name: previousName }));
+        }
+
         infoVersion.value++;
         await refresh();
     } catch (error) {
@@ -704,6 +711,65 @@ async function confirmCloudCost(action, items, targetVolume = null, targetId = n
     });
 }
 
+// ----- Undo -----
+
+const UNDO_DEPTH = 20;
+const undoSteps = [];
+const undoNotice = ref(null);
+const undoAnchor = ref(0);
+let undoSequence = 0;
+
+function offerUndo(message, undo) {
+    undoSteps.push(undo);
+    undoSteps.splice(0, Math.max(0, undoSteps.length - UNDO_DEPTH));
+    undoAnchor.value = (contentPane.value?.offsetLeft ?? 0) + (contentPane.value?.offsetWidth ?? 0) / 2;
+    undoNotice.value = { id: ++undoSequence, message };
+}
+
+async function undoLast() {
+    const undo = undoSteps.pop();
+    undoNotice.value = null;
+
+    if (!undo) {
+        return;
+    }
+
+    try {
+        await undo();
+        toast.success(t('Undone'));
+    } catch (error) {
+        toast.danger(firstError(error, t('Could not undo')));
+    }
+
+    infoVersion.value++;
+    await refresh();
+}
+
+function placeName(folderId, volume) {
+    return folderId ? (allFolders.value.find((folder) => folder.id === folderId)?.name ?? '…') : volumeName(volume);
+}
+
+const countLabel = (items) => (items.length === 1 ? (items[0].name ?? t('1 item')) : t(':count items', { count: items.length }));
+
+async function moveBack(origins) {
+    const groups = new Map();
+
+    origins.forEach(({ type, id, volume, folderId }) => {
+        const key = `${volume}:${folderId ?? ''}`;
+        const group = groups.get(key) ?? { volume, folderId, folders: [], files: [] };
+        group[type === 'folder' ? 'folders' : 'files'].push(id);
+        groups.set(key, group);
+    });
+
+    for (const group of groups.values()) {
+        await sendJson(endpoints.itemsMove, 'PUT', { folders: group.folders, files: group.files, target_volume: group.volume, target_id: group.folderId });
+    }
+}
+
+function offerMoveUndo(movedItems, origins, targetId, targetVolume) {
+    offerUndo(t(':items moved to :place', { items: countLabel(movedItems), place: placeName(targetId, targetVolume) }), () => moveBack(origins));
+}
+
 async function moveTo(movedItems, targetId, targetVolume = volumeOf(targetId)) {
     const payload = toPayload(movedItems);
     payload.folders = payload.folders.filter((id) => id !== targetId);
@@ -716,9 +782,9 @@ async function moveTo(movedItems, targetId, targetVolume = volumeOf(targetId)) {
         return;
     }
 
-    await sendJson(endpoints.itemsMove, 'PUT', { ...payload, target_volume: targetVolume, target_id: targetId });
+    const { data } = await sendJson(endpoints.itemsMove, 'PUT', { ...payload, target_volume: targetVolume, target_id: targetId });
     clearSelection();
-    toast.success(t('Moved'));
+    offerMoveUndo(movedItems, data.data.origins, targetId, targetVolume);
     await refresh();
 }
 
@@ -750,7 +816,7 @@ async function remove(removedItems) {
         await sendJson(endpoints.itemsDestroy, 'DELETE', toPayload(removedItems));
         quickLookOpen.value = false;
         clearSelection();
-        toast.success(removedItems.length === 1 ? t('Moved to trash') : t(':count items moved to trash', { count: removedItems.length }));
+        offerUndo(t(':items moved to trash', { items: countLabel(removedItems) }), () => sendJson(endpoints.trashRestore, 'POST', toPayload(removedItems)));
 
         const removedFolders = new Set(removedItems.filter((item) => item.type === 'folder').map((item) => item.id));
         const removedStep = contents.value.path.findIndex((step) => removedFolders.has(step.id));
@@ -766,13 +832,18 @@ async function remove(removedItems) {
     }
 }
 
+function draggedItems(payload) {
+    const known = (type, id) => items.value.find((item) => item.type === type && item.id === id) ?? { type, id };
+
+    return [...payload.folders.map((id) => known('folder', id)), ...payload.files.map((id) => known('file', id))];
+}
+
 function dropOnTrash(event, volume) {
     if (!carriesItems(event) || volume !== currentVolume.value) {
         return;
     }
 
-    const payload = readDraggedItems(event);
-    remove([...payload.folders.map((id) => ({ type: 'folder', id })), ...payload.files.map((id) => ({ type: 'file', id }))]);
+    remove(draggedItems(readDraggedItems(event)));
 }
 
 function onTrashRestored() {
@@ -905,7 +976,7 @@ async function dropOn(event, folderId, volume = volumeOf(folderId)) {
 
     if (carriesItems(event)) {
         const payload = readDraggedItems(event);
-        const dragged = [...payload.folders.map((id) => ({ type: 'folder', id })), ...payload.files.map((id) => ({ type: 'file', id }))];
+        const dragged = draggedItems(payload);
 
         try {
             await moveTo(dragged, folderId, volume);
@@ -990,12 +1061,12 @@ async function paste(folderId, volume, { moving = false } = {}) {
 
         if (moving) {
             payload.folders = payload.folders.filter((id) => id !== folderId);
-            await sendJson(endpoints.itemsMove, 'PUT', payload);
+            const { data } = await sendJson(endpoints.itemsMove, 'PUT', payload);
             clipboard.value = null;
-            toast.success(t('Moved'));
+            offerMoveUndo(source.items, data.data.origins, folderId, volume);
         } else {
-            await sendJson(endpoints.itemsCopy, 'POST', payload);
-            toast.success(t('Copied'));
+            const { data } = await sendJson(endpoints.itemsCopy, 'POST', payload);
+            offerUndo(t(':items copied to :place', { items: countLabel(source.items), place: placeName(folderId, volume) }), () => sendJson(endpoints.itemsDestroy, 'DELETE', data.data.copies));
         }
 
         await refresh();
@@ -1251,6 +1322,13 @@ function onKeydown(event) {
     const mod = hasMod(event);
     const handled = () => event.preventDefault();
 
+    if (mod && !event.shiftKey && !event.altKey && event.code === 'KeyZ') {
+        handled();
+        undoLast();
+
+        return;
+    }
+
     const newFolderWithItems = isMac ? event.metaKey && event.ctrlKey && event.code === 'KeyN' : event.ctrlKey && event.altKey && event.shiftKey && event.code === 'KeyN';
 
     const hasTextSelection = Boolean(window.getSelection()?.toString());
@@ -1446,7 +1524,11 @@ function onFileChanged(file) {
                 </template>
             </div>
 
-            <div class="flex min-h-0 flex-1">
+            <div class="relative flex min-h-0 flex-1">
+                <div class="pointer-events-none absolute bottom-4 z-20 -translate-x-1/2" :style="{ left: `${undoAnchor}px` }">
+                    <UndoBar :notice="undoNotice" @undo="undoLast" @close="undoNotice = null" />
+                </div>
+
                 <aside class="relative hidden shrink-0 border-r border-gray-200 bg-gray-50/70 lg:block dark:border-white/10 dark:bg-white/[0.02]" :style="{ width: `${shownTreeWidth}px` }">
                     <div class="h-full overflow-y-auto">
                         <FolderTree

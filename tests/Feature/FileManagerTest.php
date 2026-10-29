@@ -636,3 +636,18 @@ test('an uploaded photo records when and with which camera it was taken', functi
         ->assertJsonPath('data.files.0.camera', 'Canon EOS R6')
         ->assertJsonPath('data.files.0.width', 64);
 });
+
+test('moving reports where items came from and copying names the copies, so both can be undone', function () {
+    $this->actingAs($this->member());
+    $from = Folder::query()->create(['name' => 'From']);
+    $to = Folder::query()->create(['name' => 'To']);
+    $file = uploadDocument($from);
+
+    $this->putJson(route('filemanager.items.move'), ['files' => [$file->id], 'target_id' => $to->id])
+        ->assertJsonPath('data.origins.0', ['type' => 'file', 'id' => $file->id, 'volume' => 'files', 'folderId' => $from->id]);
+
+    $copy = $this->postJson(route('filemanager.items.copy'), ['files' => [$file->id], 'target_id' => $from->id])->json('data.copies');
+
+    expect($copy['folders'])->toBe([])
+        ->and(File::query()->find($copy['files'][0])->folder_id)->toBe($from->id);
+});

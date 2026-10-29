@@ -9,6 +9,7 @@ export const KEYS = {
     quickLook: 'Space',
     rename: 'Enter',
     remove: isMac ? '⌘⌫' : 'Delete',
+    undo: `${MOD}Z`,
     selectAll: `${MOD}A`,
     newFolder: isMac ? '⌘⇧N' : 'Ctrl+Shift+N',
     newFolderFallback: `${MOD}${ALT}N`,

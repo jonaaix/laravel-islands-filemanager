@@ -25,16 +25,23 @@ class ItemCopier
     /**
      * @param  Collection<int, Folder>  $folders
      * @param  Collection<int, File>  $files
+     * @return array{folders: list<int>, files: list<int>}
      */
-    public function copy(Collection $folders, Collection $files, Location $target, Authenticatable $user): void
+    public function copy(Collection $folders, Collection $files, Location $target, Authenticatable $user): array
     {
-        DB::transaction(function () use ($folders, $files, $target, $user): void {
+        return DB::transaction(function () use ($folders, $files, $target, $user): array {
+            $copies = ['folders' => [], 'files' => []];
+
             foreach ($folders as $folder) {
                 $this->ensureNotInsideItself($folder, $target);
-                $this->copyFolder($folder, $target, $user);
+                $copies['folders'][] = $this->copyFolder($folder, $target, $user)->id;
             }
 
-            $files->each(fn (File $file) => $this->copyFile($file, $target));
+            foreach ($files as $file) {
+                $copies['files'][] = $this->copyFile($file, $target)->id;
+            }
+
+            return $copies;
         });
     }
 
@@ -45,13 +52,15 @@ class ItemCopier
         }
     }
 
-    private function copyFolder(Folder $folder, Location $target, Authenticatable $user): void
+    private function copyFolder(Folder $folder, Location $target, Authenticatable $user): Folder
     {
         $copy = $this->placement->createFolder($target, $this->tree->freeName($folder->name, $target), $user);
 
         $inside = new Location($target->volume, $copy);
         $folder->children()->get()->each(fn (Folder $child) => $this->copyFolder($child, $inside, $user));
         $folder->files()->get()->each(fn (File $file) => $this->copyFile($file, $inside));
+
+        return $copy;
     }
 
     private function copyFile(File $file, Location $target): File
