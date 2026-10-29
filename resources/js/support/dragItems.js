@@ -10,13 +10,14 @@ export function startItemsDrag(event, items) {
 
     const preview = dragPreview(items);
     document.body.appendChild(preview);
-    event.dataTransfer.setDragImage(preview, items.length > 1 ? 10 : 12, items.length > 1 ? 10 : 12);
+    // The pointer sits on the preview's top-left corner, so the arrow never covers the count or the names.
+    event.dataTransfer.setDragImage(preview, 0, 0);
     setTimeout(() => preview.remove(), 0);
 }
 
 function dragPreview(items) {
     const preview = document.createElement('div');
-    preview.className = items.length > 1 ? 'fixed -left-[9999px] top-0 pl-3 pt-3' : 'fixed -left-[9999px] top-0';
+    preview.className = items.length > 1 ? 'fixed -left-[9999px] top-0 pl-7 pt-8' : 'fixed -left-[9999px] top-0 pl-4 pt-5';
 
     const list = document.createElement('div');
     list.className = 'flex max-w-64 flex-col rounded-md bg-primary-600 py-0.5 text-[13px] font-medium leading-5 text-white shadow-md';
@@ -31,7 +32,7 @@ function dragPreview(items) {
 
     if (items.length > 1) {
         const count = document.createElement('span');
-        count.className = 'absolute left-0 top-0 flex h-5 min-w-5 items-center justify-center rounded-full bg-gray-900 px-1 text-[11px] font-semibold tabular-nums text-white ring-2 ring-white';
+        count.className = 'absolute left-4 top-5 flex h-5 min-w-5 items-center justify-center rounded-full bg-gray-900 px-1 text-[11px] font-semibold tabular-nums text-white ring-2 ring-white';
         count.textContent = String(items.length);
         preview.appendChild(count);
     }
