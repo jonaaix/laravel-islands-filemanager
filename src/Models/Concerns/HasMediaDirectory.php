@@ -19,7 +19,7 @@ trait HasMediaDirectory
 
     public function mediaDisk(): Filesystem
     {
-        return Storage::disk(config('filemanager.disk', 'local'));
+        return Storage::disk(config('filemanager.disk', 'filemanager'));
     }
 
     public function mediaDirectory(): string

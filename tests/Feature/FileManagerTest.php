@@ -79,13 +79,13 @@ test('deleting a folder removes everything inside it including stored files', fu
     $child = Folder::query()->create(['name' => 'Child', 'parent_id' => $parent->id]);
     $file = uploadDocument($child);
 
-    Storage::disk('local')->assertExists($file->path);
+    Storage::disk('filemanager')->assertExists($file->path);
 
     $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$parent->id, $child->id]])->assertOk();
 
     expect(Folder::query()->count())->toBe(0)
         ->and(File::query()->count())->toBe(0);
-    Storage::disk('local')->assertMissing($file->path);
+    Storage::disk('filemanager')->assertMissing($file->path);
 });
 
 test('a file keeps notes and a comment thread in which only the author deletes a comment', function () {

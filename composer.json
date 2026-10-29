@@ -1,6 +1,6 @@
 {
     "name": "aaix/laravel-islands-filemanager",
-    "description": "A Finder-like file manager for Laravel Islands: folders, list and thumbnail views, notes, comments, Quick Look and full-text search.",
+    "description": "A file manager for Laravel Islands: folders, list and thumbnail views, notes, comments, previews and full-text search.",
     "type": "library",
     "license": "MIT",
     "require": {

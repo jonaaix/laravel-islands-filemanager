@@ -768,7 +768,7 @@ function itemEntries(chosen) {
     if (single?.type === 'folder') {
         entries.push({ label: t('Open'), icon: 'o-folder-open', shortcut: KEYS.open, action: () => openItem(single) });
     } else if (single) {
-        entries.push({ label: t('Quick Look'), icon: 'o-eye', shortcut: KEYS.quickLook, action: () => openItem(single) });
+        entries.push({ label: t('Preview'), icon: 'o-eye', shortcut: KEYS.quickLook, action: () => openItem(single) });
         entries.push({ label: t('Download'), icon: 'o-arrow-down-tray', action: () => downloadEach([single]) });
     }
 

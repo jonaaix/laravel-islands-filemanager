@@ -1,7 +1,7 @@
 {
     "name": "@aaix/laravel-islands-filemanager",
     "version": "1.0.0",
-    "description": "A Finder-like file manager for Laravel Islands.",
+    "description": "A file manager for Laravel Islands.",
     "type": "module",
     "license": "MIT",
     "exports": {

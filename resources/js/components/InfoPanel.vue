@@ -149,7 +149,7 @@ function onCommentKey(event) {
                 type="button"
                 class="flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-lg"
                 :class="single.thumbnailUrl ? 'bg-gray-50 ring-1 ring-gray-200 dark:bg-white/5 dark:ring-white/10' : ''"
-                :aria-label="t('Quick Look')"
+                :aria-label="t('Preview')"
                 @click="single.type === 'file' && emit('quick-look')"
             >
                 <img v-if="single.thumbnailUrl" :src="single.thumbnailUrl" :alt="single.name" class="h-full w-full object-contain" />
@@ -169,7 +169,7 @@ function onCommentKey(event) {
                     <template #icon><Icon name="o-arrow-down-tray" class="h-4 w-4" /></template>
                     {{ t('Download') }}
                 </Button>
-                <IconButton :label="t('Quick Look')" size="sm" @click="emit('quick-look')"><Icon name="o-eye" /></IconButton>
+                <IconButton :label="t('Preview')" size="sm" @click="emit('quick-look')"><Icon name="o-eye" /></IconButton>
                 <IconButton :label="t('Open in new tab')" size="sm" :href="file.url" target="_blank"><Icon name="o-arrow-top-right-on-square" /></IconButton>
             </div>
 

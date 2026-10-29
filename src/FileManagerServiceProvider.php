@@ -14,6 +14,15 @@ class FileManagerServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->mergeConfigFrom(__DIR__.'/../config/filemanager.php', 'filemanager');
+
+        if (! config()->has('filesystems.disks.filemanager')) {
+            config(['filesystems.disks.filemanager' => [
+                'driver' => 'local',
+                'root' => storage_path('app/filemanager'),
+                'serve' => false,
+                'throw' => false,
+            ]]);
+        }
     }
 
     public function boot(): void

@@ -25,7 +25,7 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
-        Storage::fake('local');
+        Storage::fake('filemanager');
         Gate::define('filemanager.access', fn (User $user): bool => $user->may_use_files);
     }
 

@@ -18,7 +18,7 @@ const rows = computed(() => [
     [t('Select all'), KEYS.selectAll],
     [t('Open'), `${KEYS.open} · ${t('Double-click')}`],
     [t('Enclosing folder'), KEYS.enclosing],
-    [t('Quick Look'), KEYS.quickLook],
+    [t('Preview'), KEYS.quickLook],
     [t('Rename'), KEYS.rename],
     [t('Delete'), KEYS.remove],
     [t('New folder'), `${KEYS.newFolder} · ${KEYS.newFolderFallback}`],

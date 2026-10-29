@@ -23,10 +23,12 @@ return [
     'table_prefix' => 'filemanager_',
 
     /*
-    | Where files are stored. Every file gets a directory of its own, named by an md5 of the salt
+    | Where files are stored. The package brings a private local disk of its own, `filemanager`
+    | (storage/app/filemanager), unless the application defines one with that name — point it at
+    | S3 or anywhere else there. Every file gets a directory of its own, named by an md5 of the salt
     | and its id, so directories cannot be guessed. Never change the salt once files are stored.
     */
-    'disk' => env('FILEMANAGER_DISK', 'local'),
+    'disk' => env('FILEMANAGER_DISK', 'filemanager'),
 
     'hash_salt' => env('FILEMANAGER_HASH_SALT', env('MEDIA_HASH_SALT')),
 
