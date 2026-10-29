@@ -108,9 +108,14 @@ class FilePlacement
 
     private function moveDirectoryInPlace(Folder $folder, Location $target, string $name): void
     {
-        $disk = $target->volume->filesystem();
+        $this->relocateDirectory($folder, $this->join($target->directory(), $name));
+        $folder->update(['parent_id' => $target->folderId(), 'name' => $name]);
+    }
+
+    public function relocateDirectory(Folder $folder, string $newPrefix): void
+    {
+        $disk = $folder->volume()->filesystem();
         $oldPrefix = (string) $folder->disk_path;
-        $newPrefix = $this->join($target->directory(), $name);
 
         if ($oldPrefix !== $newPrefix) {
             foreach ($disk->allDirectories($oldPrefix) as $directory) {
@@ -128,7 +133,6 @@ class FilePlacement
             }
         }
 
-        $folder->update(['parent_id' => $target->folderId(), 'name' => $name]);
         $this->rewritePrefix($folder, $oldPrefix, $newPrefix);
     }
 
@@ -205,7 +209,7 @@ class FilePlacement
         return strtolower(pathinfo($name, PATHINFO_EXTENSION)) ?: 'bin';
     }
 
-    private function join(string $directory, string $name): string
+    public function join(string $directory, string $name): string
     {
         return ltrim($directory.'/'.str_replace(['/', '\\'], '-', $name), '/');
     }

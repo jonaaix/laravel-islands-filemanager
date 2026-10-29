@@ -42,14 +42,16 @@ Never copy package code into the app to change it — change the package or its 
   `filemanager:scan`), re-linking renamed files by `fingerprint`. Never write paths or move files by
   hand — always through `FilePlacement`, which handles both modes and cross-volume moves.
 - **Moving a real folder moves the whole directory on the disk**, including files the index has not
-  seen yet (`FilePlacement::moveDirectoryInPlace`); leaving a direct volume scans the subtree first.
+  seen yet (`FilePlacement::relocateDirectory`); leaving a direct volume scans the subtree first.
   Never delete an old directory while the disk still lists files in it.
 - **Forget, don't delete,** records whose file vanished from a direct volume: `File::forget()` drops
   the record and its helpers without touching anything else on the disk.
 - **Helper data lives in `.laravel-islands-filemanager/`** at the root of the volume's disk (thumbnails, extracted
   text), written at upload from the uploaded file — no later download is needed, on any disk.
-- **Delete through the package.** Folder deletion must go through `FolderTree::delete()` so stored
-  files are removed; deleting rows directly orphans files on disk.
+- **Delete through the trash.** Folders and files soft-delete into the trash via `Trash::throwAway()`
+  (`trash_root` marks the entry, its contents carry `deleted_at` too); `Trash::purge()` removes them for
+  good, with their stored files. A plain `delete()` only soft-deletes, `forceDelete()` on rows directly
+  orphans files on disk. On direct volumes trashed items live under `.laravel-islands-filemanager/trash/`.
 - **Text extraction is queued.** `ExtractFileTextJob` runs after each upload and needs a worker.
   OCR uses `tesseract` if installed, at most ten pages, so the job stays below a 90 s `retry_after`.
   Backfill with `php artisan filemanager:extract-text` (`--all` re-reads everything).

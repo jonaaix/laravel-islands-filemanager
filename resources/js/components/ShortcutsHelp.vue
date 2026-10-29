@@ -20,7 +20,7 @@ const rows = computed(() => [
     [t('Enclosing folder'), KEYS.enclosing],
     [t('Preview'), KEYS.quickLook],
     [t('Rename'), KEYS.rename],
-    [t('Delete'), KEYS.remove],
+    [t('Move to trash'), KEYS.remove],
     [t('New folder'), `${KEYS.newFolder} · ${KEYS.newFolderFallback}`],
     [t('New folder with the selection'), KEYS.newFolderWithItems],
     [t('New tab / close tab'), `${KEYS.newTab} / ${KEYS.closeTab}`],

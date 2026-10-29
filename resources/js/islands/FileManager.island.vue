@@ -15,6 +15,7 @@ import PaneResizer from '../components/PaneResizer.vue';
 import QuickLook from '../components/QuickLook.vue';
 import ShortcutsHelp from '../components/ShortcutsHelp.vue';
 import TabBar from '../components/TabBar.vue';
+import TrashView from '../components/TrashView.vue';
 import { itemCount } from '../support/counts.js';
 import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, toPayload } from '../support/dragItems.js';
 import { collectDroppedFiles, fromFileInput, takeDroppedEntries } from '../support/droppedFiles.js';
@@ -46,6 +47,8 @@ const volumeName = (key) => volumes.value.find((volume) => volume.key === key)?.
 const canWriteTo = (key) => volumes.value.find((volume) => volume.key === key)?.canWrite ?? false;
 const canWrite = computed(() => contents.value.canWrite);
 const clipboard = ref(null);
+const trashVolume = ref(null);
+const trashCount = ref(0);
 
 // ----- Tabs -----
 
@@ -478,10 +481,11 @@ function refresh() {
 }
 
 function openFolder(folderId, selectKey = null, volume = volumeOf(folderId)) {
-    if (folderId === contents.value.folderId && volume === currentVolume.value) {
+    if (folderId === contents.value.folderId && volume === currentVolume.value && !trashVolume.value) {
         return Promise.resolve();
     }
 
+    trashVolume.value = null;
     query.value = '';
     expanded.value = new Set();
     historyIndex++;
@@ -518,7 +522,42 @@ function onPopState(event) {
     query.value = '';
     expanded.value = new Set();
     selected.value = new Set();
-    load(state.volume ?? volumes.value[0]?.key, state.folder ?? null);
+
+    if (state.trash) {
+        showTrash(state.volume);
+    } else {
+        trashVolume.value = null;
+        load(state.volume ?? volumes.value[0]?.key, state.folder ?? null);
+    }
+}
+
+function trashUrl(volume) {
+    const url = new URL(pageUrl(volume, null));
+    url.searchParams.set('trash', '1');
+
+    return url.toString();
+}
+
+function showTrash(volume) {
+    trashVolume.value = volume;
+
+    if (volume !== currentVolume.value || contents.value.folderId !== null) {
+        load(volume, null, { quiet: true });
+    }
+}
+
+function openTrash(volume = currentVolume.value) {
+    if (trashVolume.value === volume) {
+        return;
+    }
+
+    query.value = '';
+    clearSelection();
+    historyIndex++;
+    historyMax = historyIndex;
+    history.pushState({ volume, trash: true, index: historyIndex }, '', trashUrl(volume));
+    updateHistoryButtons();
+    showTrash(volume);
 }
 
 // ----- View -----
@@ -692,20 +731,7 @@ async function submitMove({ volume, folderId }) {
 }
 
 async function remove(removedItems) {
-    if (!removedItems.length) {
-        return;
-    }
-
-    const single = removedItems.length === 1 ? removedItems[0] : null;
-    const ok = await confirm({
-        title: single ? t('Delete :name?', { name: single.name }) : t('Delete :count items?', { count: removedItems.length }),
-        message: removedItems.some((item) => item.type === 'folder') ? t('Everything inside the folders is deleted as well. This cannot be undone.') : t('This cannot be undone.'),
-        tone: 'danger',
-        confirmLabel: t('Delete'),
-        cancelLabel: t('Cancel'),
-    });
-
-    if (!ok) {
+    if (!removedItems.length || !(await confirmCloudCost('trash', removedItems))) {
         return;
     }
 
@@ -713,7 +739,7 @@ async function remove(removedItems) {
         await sendJson(endpoints.itemsDestroy, 'DELETE', toPayload(removedItems));
         quickLookOpen.value = false;
         clearSelection();
-        toast.success(t('Deleted'));
+        toast.success(removedItems.length === 1 ? t('Moved to trash') : t(':count items moved to trash', { count: removedItems.length }));
 
         const removedFolders = new Set(removedItems.filter((item) => item.type === 'folder').map((item) => item.id));
         const removedStep = contents.value.path.findIndex((step) => removedFolders.has(step.id));
@@ -725,8 +751,22 @@ async function remove(removedItems) {
             await refresh();
         }
     } catch (error) {
-        toast.danger(firstError(error, t('Could not delete the items')));
+        toast.danger(firstError(error, t('Could not move the items to the trash')));
     }
+}
+
+function dropOnTrash(event, volume) {
+    if (!carriesItems(event) || volume !== currentVolume.value) {
+        return;
+    }
+
+    const payload = readDraggedItems(event);
+    remove([...payload.folders.map((id) => ({ type: 'folder', id })), ...payload.files.map((id) => ({ type: 'file', id }))]);
+}
+
+function onTrashRestored() {
+    folderCache.clear();
+    loadTree();
 }
 
 function downloadZip(zippedItems) {
@@ -1002,7 +1042,7 @@ function itemEntries(chosen) {
     entries.push({ label: t('Move to…'), icon: 'o-arrows-right-left', action: () => startMove(chosen) });
     entries.push({ label: chosen.length === 1 ? t('New folder with 1 item') : t('New folder with :count items', { count: chosen.length }), icon: 'o-folder-plus', shortcut: KEYS.newFolderWithItems, action: () => createFolderWithItems(chosen) });
     entries.push({ divider: true });
-    entries.push({ label: single ? t('Delete') : t('Delete :count items', { count: chosen.length }), icon: 'o-trash', tone: 'danger', shortcut: KEYS.remove, action: () => remove(chosen) });
+    entries.push({ label: t('Move to trash'), icon: 'o-trash', tone: 'danger', shortcut: KEYS.remove, action: () => remove(chosen) });
 
     return finish(entries);
 }
@@ -1070,7 +1110,7 @@ function onTreeContextMenu(event, folder) {
                     { label: t('Rename'), icon: 'o-pencil-square', action: () => (treeRenamingId.value = folder.id) },
                     { label: t('Move to…'), icon: 'o-arrows-right-left', action: () => startMove([item]) },
                     { divider: true },
-                    { label: t('Delete'), icon: 'o-trash', tone: 'danger', action: () => remove([item]) },
+                    { label: t('Move to trash'), icon: 'o-trash', tone: 'danger', action: () => remove([item]) },
                 ]
                 : []),
         ]),
@@ -1168,7 +1208,7 @@ function jumpToName(character) {
 }
 
 function onKeydown(event) {
-    if (menu.value || helpOpen.value || moving.value.length || renamingKey.value || treeRenamingId.value) {
+    if (trashVolume.value || menu.value || helpOpen.value || moving.value.length || renamingKey.value || treeRenamingId.value) {
         return;
     }
 
@@ -1293,7 +1333,12 @@ onMounted(() => {
     prefetchSubfolders(contents.value);
     fitToViewport();
     window.addEventListener('resize', fitToViewport);
-    history.replaceState({ volume: currentVolume.value, folder: contents.value.folderId, index: 0 }, '', window.location.href);
+    const startsInTrash = new URL(window.location.href).searchParams.has('trash') && canWrite.value;
+    history.replaceState({ volume: currentVolume.value, folder: contents.value.folderId, trash: startsInTrash, index: 0 }, '', window.location.href);
+
+    if (startsInTrash) {
+        showTrash(currentVolume.value);
+    }
     window.addEventListener('popstate', onPopState);
     window.addEventListener('keydown', onKeydown);
 
@@ -1335,14 +1380,18 @@ function onFileChanged(file) {
                     <button
                         type="button"
                         class="inline-flex h-7 shrink-0 items-center rounded-md px-2 hover:bg-gray-100 dark:hover:bg-white/5"
-                        :class="contents.path.length ? 'text-gray-600 dark:text-gray-300' : 'font-semibold text-gray-900 dark:text-white'"
+                        :class="contents.path.length || trashVolume ? 'text-gray-600 dark:text-gray-300' : 'font-semibold text-gray-900 dark:text-white'"
                         @click="openFolder(null, null, currentVolume)"
                         @dragover="allowDrop"
                         @drop.prevent="dropOn($event, null, currentVolume)"
                     >
                         {{ volumeName(currentVolume) }}
                     </button>
-                    <template v-for="(step, index) in contents.path" :key="step.id">
+                    <template v-if="trashVolume">
+                        <Icon name="o-chevron-right" class="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                        <span class="inline-flex h-7 shrink-0 items-center px-2 font-semibold text-gray-900 dark:text-white">{{ t('Trash') }}</span>
+                    </template>
+                    <template v-for="(step, index) in trashVolume ? [] : contents.path" :key="step.id">
                         <Icon name="o-chevron-right" class="h-3.5 w-3.5 shrink-0 text-gray-400" />
                         <button
                             type="button"
@@ -1357,6 +1406,7 @@ function onFileChanged(file) {
                     </template>
                 </nav>
 
+                <template v-if="!trashVolume">
                 <div class="hidden w-28 md:block" :class="view.mode === 'grid' ? '' : 'invisible'">
                     <Slider v-model="view.tileSize" :min="props.tileSize.min" :max="props.tileSize.max" :step="8" :aria-label="t('Thumbnail size')" @commit="saveView" />
                 </div>
@@ -1373,6 +1423,7 @@ function onFileChanged(file) {
                         @keydown="onSearchKey"
                     />
                 </label>
+                </template>
             </div>
 
             <div class="flex min-h-0 flex-1">
@@ -1384,12 +1435,15 @@ function onFileChanged(file) {
                             :current-id="contents.folderId"
                             :path="contents.path"
                             :renaming-id="treeRenamingId"
+                            :trash-volume="trashVolume"
                             @open="(folderId, volume) => openFolder(folderId, null, volume)"
                             @open-tab="(folderId, volume) => openTab({ volume, folderId })"
                             @drop="dropOn"
                             @contextmenu="onTreeContextMenu"
                             @rename-save="saveTreeRename"
                             @rename-cancel="treeRenamingId = null"
+                            @open-trash="openTrash"
+                            @drop-trash="dropOnTrash"
                         />
                     </div>
                     <PaneResizer
@@ -1410,13 +1464,22 @@ function onFileChanged(file) {
                     class="relative min-w-0 flex-1 overflow-y-auto outline-none"
                     :class="filesOver ? 'bg-primary-50/50 ring-2 ring-inset ring-primary-500 dark:bg-primary-500/10' : ''"
                     @click="clearSelection"
-                    @contextmenu.prevent="onBackgroundContextMenu"
-                    @dragenter="onPaneDragEnter"
-                    @dragleave="onPaneDragLeave"
-                    @dragover="onPaneDragOver"
-                    @drop="onPaneDrop"
+                    @contextmenu.prevent="trashVolume || onBackgroundContextMenu($event)"
+                    @dragenter="trashVolume || onPaneDragEnter($event)"
+                    @dragleave="trashVolume || onPaneDragLeave($event)"
+                    @dragover="trashVolume || onPaneDragOver($event)"
+                    @drop="trashVolume || onPaneDrop($event)"
                 >
-                    <div v-if="loading" class="space-y-1 p-3">
+                    <TrashView
+                        v-if="trashVolume"
+                        :volume="trashVolume"
+                        :endpoints="endpoints"
+                        :confirm-restore="(restored) => confirmCloudCost('restore', restored)"
+                        @restored="onTrashRestored"
+                        @count="trashCount = $event"
+                    />
+
+                    <div v-else-if="loading" class="space-y-1 p-3">
                         <Skeleton v-for="row in 8" :key="row" variant="block" height="28px" />
                     </div>
 
@@ -1474,7 +1537,7 @@ function onFileChanged(file) {
                     />
                 </div>
 
-                <aside class="relative hidden shrink-0 border-l border-gray-200 xl:block dark:border-white/10" :style="{ width: `${shownInfoWidth}px` }">
+                <aside v-if="!trashVolume" class="relative hidden shrink-0 border-l border-gray-200 xl:block dark:border-white/10" :style="{ width: `${shownInfoWidth}px` }">
                     <PaneResizer
                         :model-value="shownInfoWidth"
                         :min="limits.info.min"
@@ -1502,7 +1565,8 @@ function onFileChanged(file) {
 
             <div class="flex h-7 shrink-0 items-center justify-between gap-3 border-t border-gray-200 px-3 text-xs tabular-nums text-gray-500 dark:border-white/10 dark:text-gray-400">
                 <span>
-                    <template v-if="selectedItems.length">{{ t(':selected of :count selected', { selected: selectedItems.length, count: items.length }) }}</template>
+                    <template v-if="trashVolume">{{ itemCount(t, trashCount) }}</template>
+                    <template v-else-if="selectedItems.length">{{ t(':selected of :count selected', { selected: selectedItems.length, count: items.length }) }}</template>
                     <template v-else>{{ itemCount(t, items.length) }}</template>
                     <template v-if="selectedSize"> · {{ formatFileSize(selectedSize) }}</template>
                 </span>

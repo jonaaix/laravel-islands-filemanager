@@ -62,6 +62,16 @@ final readonly class Volume
         return $this->rootPath(implode('/', [self::HELPER_DIRECTORY, $kind, substr($hash, 0, 2), substr($hash, 2, 2), $hash.'.'.$extension]));
     }
 
+    public function trashPath(string $entry, string $name): string
+    {
+        return $this->rootPath(implode('/', [self::HELPER_DIRECTORY, 'trash', $entry, str_replace(['/', '\\'], '-', $name)]));
+    }
+
+    public function isInTrash(string $path): bool
+    {
+        return str_starts_with($path, $this->rootPath(self::HELPER_DIRECTORY.'/trash').'/');
+    }
+
     /**
      * @return array{key: string, name: string, canWrite: bool}
      */

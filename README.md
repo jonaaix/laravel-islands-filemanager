@@ -18,7 +18,7 @@ A file manager for <a href="https://github.com/jonaaix/laravel-islands">Laravel 
 ---
 
 A file manager as one Laravel Islands page: several drives, tabs, folder tree, list and thumbnail
-views, notes and comments, previews, keyboard shortcuts, copy and paste, folder uploads and full-text search — including Office
+views, notes and comments, previews, keyboard shortcuts, copy and paste, a trash, folder uploads and full-text search — including Office
 files and scanned documents.
 
 ## Requirements
@@ -106,8 +106,11 @@ below its `root` and writes to it directly. Changes made outside are picked up w
 and by `php artisan filemanager:scan` (scheduled nightly); files renamed outside keep their notes and
 comments, recognised by inode or ETag.
 
-Thumbnails and extracted text are kept on the same disk in a hidden `.laravel-islands-filemanager` folder. Route
-prefix, middleware, OCR languages and more live in the same config file.
+Deleted items go to a trash per drive and are deleted for good after `trash_days` (30, `null` keeps
+them until emptied by hand) by the scheduled `filemanager:purge-trash`.
+
+Thumbnails, extracted text and the trash of `direct` drives are kept on the same disk in a hidden
+`.laravel-islands-filemanager` folder. Route prefix, middleware, OCR languages and more live in the same config file.
 
 ## License
 

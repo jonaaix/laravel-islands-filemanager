@@ -9,15 +9,23 @@ use Aaix\LaravelIslandsFilemanager\Volume;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Folder extends Model
 {
+    use SoftDeletes;
+
     public function getTable(): string
     {
         return FileManager::table('folders');
     }
 
     protected $guarded = [];
+
+    protected function casts(): array
+    {
+        return ['trash_root' => 'boolean'];
+    }
 
     public function volume(): Volume
     {
@@ -42,5 +50,10 @@ class Folder extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(FileManager::userModel(), 'created_by_id');
+    }
+
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(FileManager::userModel(), 'deleted_by_id');
     }
 }

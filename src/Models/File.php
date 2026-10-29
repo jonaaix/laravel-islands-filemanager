@@ -11,12 +11,14 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class File extends Model
 {
     use HasMediaDirectory {
         mediaDirectory as freshMediaDirectory;
     }
+    use SoftDeletes;
 
     public function getTable(): string
     {
@@ -25,12 +27,17 @@ class File extends Model
 
     protected $guarded = [];
 
+    protected function casts(): array
+    {
+        return ['trash_root' => 'boolean'];
+    }
+
     // A record forgotten after the file vanished from a real folder must not delete anything else on that disk.
     public bool $removesOriginal = true;
 
     protected static function booted(): void
     {
-        static::deleted(function (self $file): void {
+        static::forceDeleted(function (self $file): void {
             $direct = $file->volume()->isDirect() && $file->removesOriginal;
             $file->mediaDisk()->delete(array_values(array_filter([
                 $file->thumbnail_path,
@@ -48,7 +55,7 @@ class File extends Model
     public function forget(): void
     {
         $this->removesOriginal = false;
-        $this->delete();
+        $this->forceDelete();
     }
 
     public function mediaDirectory(): string
@@ -74,6 +81,11 @@ class File extends Model
     public function uploadedBy(): BelongsTo
     {
         return $this->belongsTo(FileManager::userModel(), 'uploaded_by_id');
+    }
+
+    public function deletedBy(): BelongsTo
+    {
+        return $this->belongsTo(FileManager::userModel(), 'deleted_by_id');
     }
 
     public function isImage(): bool

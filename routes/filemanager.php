@@ -21,6 +21,11 @@ Route::post('items/estimate', [Controller::class, 'estimate'])->name('items.esti
 Route::delete('items', [Controller::class, 'destroyItems'])->name('items.destroy');
 Route::get('items/zip', [Controller::class, 'zip'])->name('items.zip');
 
+Route::get('trash', [Controller::class, 'trash'])->name('trash.index');
+Route::post('trash/restore', [Controller::class, 'restoreItems'])->name('trash.restore');
+Route::delete('trash/items', [Controller::class, 'purgeItems'])->name('trash.purge');
+Route::delete('trash', [Controller::class, 'emptyTrash'])->name('trash.empty');
+
 Route::post('files', [Controller::class, 'storeFiles'])->name('files.store');
 Route::get('files/{file}', [Controller::class, 'showFile'])->name('files.show');
 Route::put('files/{file}', [Controller::class, 'updateFile'])->name('files.update');

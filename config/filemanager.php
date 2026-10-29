@@ -45,6 +45,12 @@ return [
     'scan_schedule' => '30 2 * * *',
 
     /*
+    | Days an item stays in the trash before it is deleted for good (checked nightly); null keeps
+    | it until the trash is emptied by hand.
+    */
+    'trash_days' => 30,
+
+    /*
     | Copying and moving between drives. Null lets everyone who may write to both drives do it.
     */
     'transfer_ability' => null,

@@ -21,6 +21,7 @@ use Aaix\LaravelIslandsFilemanager\Services\FileStore;
 use Aaix\LaravelIslandsFilemanager\Services\FolderPathResolver;
 use Aaix\LaravelIslandsFilemanager\Services\FolderTree;
 use Aaix\LaravelIslandsFilemanager\Services\ItemCopier;
+use Aaix\LaravelIslandsFilemanager\Services\Trash;
 use Aaix\LaravelIslandsFilemanager\Services\ZipBuilder;
 use Aaix\LaravelIslandsFilemanager\Volume;
 use Illuminate\Contracts\Auth\Authenticatable;
@@ -168,14 +169,14 @@ class FileManagerController extends Controller
     public function estimate(Request $request, FolderTree $tree): JsonResponse
     {
         $user = $this->authorizeAccess($request);
-        $validated = $request->validate(['action' => ['required', Rule::in(['move', 'copy', 'rename'])]]);
-        [$folders, $files] = $this->selectedItems($request, $user);
-        $target = $validated['action'] === 'rename' ? null : $this->location($request, $user, 'target_volume', 'target_id');
+        $validated = $request->validate(['action' => ['required', Rule::in(['move', 'copy', 'rename', 'trash', 'restore'])]]);
+        [$folders, $files] = $this->selectedItems($request, $user, trashed: $validated['action'] === 'restore');
+        $target = in_array($validated['action'], ['move', 'copy'], true) ? $this->location($request, $user, 'target_volume', 'target_id') : null;
 
         $copiesBytes = fn (Volume $source): bool => match ($validated['action']) {
             'copy' => true,
             'move' => $target->volume->key !== $source->key || $source->isDirect(),
-            'rename' => $source->isDirect(),
+            'rename', 'trash', 'restore' => $source->isDirect(),
         };
 
         $count = 0;
@@ -239,15 +240,15 @@ class FileManagerController extends Controller
         return response()->json(['data' => ['copied' => $folders->count() + $files->count()]]);
     }
 
-    public function destroyItems(Request $request, ItemsWriter $writer): JsonResponse
+    public function destroyItems(Request $request, Trash $trash): JsonResponse
     {
         $user = $this->authorizeAccess($request);
         [$folders, $files] = $this->selectedItems($request, $user);
         $this->authorizeWrite($user, ...$folders, ...$files);
 
-        $writer->delete($folders, $files);
+        $trash->throwAway($folders, $files, $user);
 
-        return response()->json(['data' => ['deleted' => $folders->count() + $files->count()]]);
+        return response()->json(['data' => ['trashed' => $folders->count() + $files->count()]]);
     }
 
     public function zip(Request $request, ZipBuilder $builder): BinaryFileResponse
@@ -258,6 +259,51 @@ class FileManagerController extends Controller
         $name = $folders->count() === 1 && $files->isEmpty() ? $folders->first()->name : __('Files');
 
         return response()->download($builder->build($folders, $files), $name.'.zip', ['Content-Type' => 'application/zip'])->deleteFileAfterSend();
+    }
+
+    // ----- Trash -----
+
+    public function trash(Request $request, Trash $trash): JsonResponse
+    {
+        $user = $this->authorizeAccess($request);
+        $location = $this->location($request, $user);
+        $this->authorizeWrite($user, $location);
+
+        return response()->json(['data' => [
+            'entries' => $trash->entries($location->volume)->map(fn (Folder|File $entry): array => $this->presenter->trashEntry($entry, $trash->originalPath($entry)))->all(),
+            'retentionDays' => Trash::retentionDays(),
+        ]]);
+    }
+
+    public function restoreItems(Request $request, Trash $trash): JsonResponse
+    {
+        $user = $this->authorizeAccess($request);
+        [$folders, $files] = $this->selectedItems($request, $user, trashed: true);
+        $this->authorizeWrite($user, ...$folders, ...$files);
+
+        $folders->concat($files)->each(fn (Folder|File $entry) => $trash->restore($entry));
+
+        return response()->json(['data' => ['restored' => $folders->count() + $files->count()]]);
+    }
+
+    public function purgeItems(Request $request, Trash $trash): JsonResponse
+    {
+        $user = $this->authorizeAccess($request);
+        [$folders, $files] = $this->selectedItems($request, $user, trashed: true);
+        $this->authorizeWrite($user, ...$folders, ...$files);
+
+        $folders->concat($files)->each(fn (Folder|File $entry) => $trash->purge($entry));
+
+        return response()->json(['data' => ['deleted' => $folders->count() + $files->count()]]);
+    }
+
+    public function emptyTrash(Request $request, Trash $trash): JsonResponse
+    {
+        $user = $this->authorizeAccess($request);
+        $location = $this->location($request, $user);
+        $this->authorizeWrite($user, $location);
+
+        return response()->json(['data' => ['deleted' => $trash->empty($location->volume)]]);
     }
 
     // ----- Files -----
@@ -382,7 +428,7 @@ class FileManagerController extends Controller
     /**
      * @return array{0: Collection<int, Folder>, 1: Collection<int, File>}
      */
-    private function selectedItems(Request $request, Authenticatable $user): array
+    private function selectedItems(Request $request, Authenticatable $user, bool $trashed = false): array
     {
         $validated = $request->validate([
             'folders' => ['array'],
@@ -392,8 +438,8 @@ class FileManagerController extends Controller
         ]);
 
         $volumes = array_keys(FileManager::volumesFor($user));
-        $folders = Folder::query()->whereIn('volume', $volumes)->whereKey($validated['folders'] ?? [])->orderBy('name')->get();
-        $files = File::query()->whereIn('volume', $volumes)->whereKey($validated['files'] ?? [])->orderBy('name')->get();
+        $folders = ($trashed ? Folder::onlyTrashed()->where('trash_root', true) : Folder::query())->whereIn('volume', $volumes)->whereKey($validated['folders'] ?? [])->orderBy('name')->get();
+        $files = ($trashed ? File::onlyTrashed()->where('trash_root', true) : File::query())->whereIn('volume', $volumes)->whereKey($validated['files'] ?? [])->orderBy('name')->get();
 
         if ($folders->isEmpty() && $files->isEmpty()) {
             throw new NotFoundHttpException;

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Aaix\LaravelIslandsFilemanager\Services;
 
 use Aaix\LaravelIslandsFilemanager\Location;
-use Aaix\LaravelIslandsFilemanager\Models\File;
 use Aaix\LaravelIslandsFilemanager\Models\Folder;
 use Illuminate\Support\Collection;
 
@@ -77,17 +76,5 @@ class FolderTree
     public function canMoveInto(Folder $folder, ?Folder $target): bool
     {
         return $target === null || ! $this->descendantIds($folder)->contains($target->id);
-    }
-
-    public function delete(Folder $folder): void
-    {
-        $ids = $this->descendantIds($folder);
-
-        File::query()->whereIn('folder_id', $ids)->get()->each->delete();
-        $folder->delete();
-
-        if ($folder->disk_path !== null && $folder->volume()->isDirect()) {
-            $folder->volume()->filesystem()->deleteDirectory($folder->disk_path);
-        }
     }
 }

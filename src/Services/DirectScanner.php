@@ -149,6 +149,8 @@ class DirectScanner
     {
         $folder->children()->get()->each(fn (Folder $child) => $this->forgetFolder($child));
         $folder->files()->get()->each(fn (File $file) => $file->forget());
-        $folder->delete();
+        Folder::onlyTrashed()->where('parent_id', $folder->id)->update(['parent_id' => null]);
+        File::onlyTrashed()->where('folder_id', $folder->id)->update(['folder_id' => null]);
+        $folder->forceDelete();
     }
 }

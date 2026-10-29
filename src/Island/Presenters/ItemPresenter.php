@@ -58,6 +58,27 @@ class ItemPresenter
     }
 
     /**
+     * @param  list<string>  $originalPath
+     * @return array<string, mixed>
+     */
+    public function trashEntry(Folder|File $entry, array $originalPath): array
+    {
+        $isFolder = $entry instanceof Folder;
+
+        return [
+            'type' => $isFolder ? 'folder' : 'file',
+            'id' => $entry->id,
+            'name' => $entry->name,
+            'extension' => $isFolder ? null : strtoupper(pathinfo($entry->name, PATHINFO_EXTENSION)),
+            'size' => $isFolder ? null : (int) $entry->size,
+            'originalPath' => $originalPath,
+            'deletedAt' => $entry->deleted_at?->toIso8601String(),
+            'deletedBy' => $entry->deletedBy?->name,
+            'deletedByAvatar' => FileManager::avatarOf($entry->deletedBy),
+        ];
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function detail(File $file, Authenticatable $viewer): array

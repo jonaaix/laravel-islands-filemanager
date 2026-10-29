@@ -74,18 +74,28 @@ test('several items move together, but a folder never into itself or one of its 
         ->and($file->refresh()->folder_id)->toBe($other->id);
 });
 
-test('deleting a folder removes everything inside it including stored files', function () {
+test('deleting moves a folder with everything inside to the trash, from where it can be restored or deleted for good', function () {
     $this->actingAs($this->member());
     $parent = Folder::query()->create(['name' => 'Parent']);
     $child = Folder::query()->create(['name' => 'Child', 'parent_id' => $parent->id]);
     $file = uploadDocument($child);
 
-    Storage::disk('filemanager')->assertExists($file->path);
-
     $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$parent->id, $child->id]])->assertOk();
 
     expect(Folder::query()->count())->toBe(0)
         ->and(File::query()->count())->toBe(0);
+    Storage::disk('filemanager')->assertExists($file->path);
+    $this->getJson(route('filemanager.trash.index'))->assertJsonCount(1, 'data.entries')->assertJsonPath('data.entries.0.name', 'Parent');
+
+    $this->postJson(route('filemanager.trash.restore'), ['folders' => [$parent->id]])->assertOk();
+    expect(Folder::query()->count())->toBe(2)
+        ->and($file->refresh()->folder_id)->toBe($child->id);
+
+    $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$parent->id]])->assertOk();
+    $this->deleteJson(route('filemanager.trash.empty'))->assertOk()->assertJsonPath('data.deleted', 1);
+
+    expect(Folder::withTrashed()->count())->toBe(0)
+        ->and(File::withTrashed()->count())->toBe(0);
     Storage::disk('filemanager')->assertMissing($file->path);
 });
 
@@ -546,4 +556,57 @@ test('renaming or moving a real folder takes along files the file manager has no
     $this->putJson(route('filemanager.folders.store'), [])->assertStatus(405);
     $disk->makeDirectory('Projects/Taken');
     $this->postJson(route('filemanager.folders.store'), ['volume' => 'shared', 'name' => 'Taken'])->assertJsonValidationErrors('name');
+});
+
+test('on a direct volume the trash keeps items in a hidden folder and puts them back where they were', function () {
+    $this->actingAs($this->member());
+    $disk = Storage::disk('shared');
+    $disk->put('Projects/Customer A/offer.pdf', 'offer');
+    $disk->put('Projects/Customer A/Drafts/draft.pdf', 'draft');
+    $disk->put('Projects/notes.txt', 'notes');
+    $this->artisan('filemanager:scan', ['volume' => 'shared'])->assertSuccessful();
+
+    $customer = Folder::query()->where('volume', 'shared')->where('name', 'Customer A')->sole();
+    $notes = File::query()->where('name', 'notes.txt')->sole();
+    $notes->update(['notes' => 'Keep']);
+
+    $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$customer->id], 'files' => [$notes->id]])->assertOk();
+    $disk->assertMissing(['Projects/Customer A', 'Projects/notes.txt']);
+    expect($disk->allFiles('Projects/.laravel-islands-filemanager/trash'))->toHaveCount(3);
+
+    $this->artisan('filemanager:scan', ['volume' => 'shared'])->assertSuccessful();
+    expect(File::onlyTrashed()->count())->toBe(3);
+
+    $disk->put('Projects/notes.txt', 'a new file with the same name');
+    $this->postJson(route('filemanager.trash.restore'), ['folders' => [$customer->id], 'files' => [$notes->id]])->assertOk();
+
+    $disk->assertExists(['Projects/Customer A/offer.pdf', 'Projects/Customer A/Drafts/draft.pdf', 'Projects/notes 2.txt', 'Projects/notes.txt']);
+    expect($disk->allFiles('Projects/.laravel-islands-filemanager/trash'))->toBe([])
+        ->and($notes->refresh()->notes)->toBe('Keep')
+        ->and($notes->path)->toBe('Projects/notes 2.txt');
+
+    $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$customer->id]])->assertOk();
+    $this->deleteJson(route('filemanager.trash.purge'), ['folders' => [$customer->id]])->assertOk();
+
+    expect($disk->allFiles('Projects/.laravel-islands-filemanager/trash'))->toBe([])
+        ->and(Folder::withTrashed()->whereKey($customer->id)->exists())->toBeFalse();
+    $disk->assertExists(['Projects/notes.txt', 'Projects/notes 2.txt']);
+});
+
+test('the trash is only open to writers and forgets items after the configured days', function () {
+    $folder = Folder::query()->create(['name' => 'Old']);
+    $recent = Folder::query()->create(['name' => 'Recent']);
+    config(['filemanager.volumes.files.write_ability' => 'filemanager.write']);
+    Gate::define('filemanager.write', fn ($user): bool => $user->name !== 'Reader');
+
+    $this->actingAs($this->member(['name' => 'Reader']));
+    $this->getJson(route('filemanager.trash.index'))->assertForbidden();
+
+    $this->actingAs($this->member());
+    $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$folder->id, $recent->id]])->assertOk();
+    Folder::onlyTrashed()->whereKey($folder->id)->update(['deleted_at' => now()->subDays(31)]);
+
+    $this->artisan('filemanager:purge-trash')->assertSuccessful();
+
+    expect(Folder::withTrashed()->pluck('name')->all())->toBe(['Recent']);
 });

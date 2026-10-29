@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Aaix\LaravelIslandsFilemanager;
 
 use Aaix\LaravelIslandsFilemanager\Commands\ExtractFileTextCmd;
+use Aaix\LaravelIslandsFilemanager\Commands\PurgeTrashCmd;
 use Aaix\LaravelIslandsFilemanager\Commands\ScanVolumesCmd;
 use Aaix\LaravelIslandsFilemanager\Http\PageController;
 use Illuminate\Console\Scheduling\Schedule;
@@ -35,12 +36,16 @@ class FileManagerServiceProvider extends ServiceProvider
         $this->publishesMigrations([__DIR__.'/../database/migrations' => database_path('migrations')], 'filemanager-migrations');
 
         if ($this->app->runningInConsole()) {
-            $this->commands([ExtractFileTextCmd::class, ScanVolumesCmd::class]);
+            $this->commands([ExtractFileTextCmd::class, PurgeTrashCmd::class, ScanVolumesCmd::class]);
         }
 
         $this->callAfterResolving(Schedule::class, function (Schedule $schedule): void {
             if (config('filemanager.scan_schedule') !== null && collect(FileManager::volumes())->contains(fn (Volume $volume): bool => $volume->isDirect())) {
                 $schedule->command('filemanager:scan')->cron(config('filemanager.scan_schedule'))->withoutOverlapping();
+            }
+
+            if (config('filemanager.trash_days') !== null) {
+                $schedule->command('filemanager:purge-trash')->dailyAt('03:15')->withoutOverlapping();
             }
         });
 

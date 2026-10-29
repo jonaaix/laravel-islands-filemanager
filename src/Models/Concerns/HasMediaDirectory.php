@@ -12,7 +12,7 @@ trait HasMediaDirectory
 {
     public static function bootHasMediaDirectory(): void
     {
-        static::deleted(function (self $model): void {
+        static::forceDeleted(function (self $model): void {
             if (! FileManager::volume($model->getAttribute('volume'))->isDirect()) {
                 $model->mediaDisk()->deleteDirectory($model->mediaDirectory());
             }
