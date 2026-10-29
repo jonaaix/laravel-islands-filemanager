@@ -22,6 +22,7 @@ import { carriesFiles, carriesItems, itemKey, readDraggedItems, startItemsDrag, 
 import { collectDroppedFiles, fromFileInput, takeDroppedEntries } from '../support/droppedFiles.js';
 import { KEYS, hasMod, isMac, isTyping } from '../support/shortcuts.js';
 import { useMarquee } from '../support/marquee.js';
+import { moveBack, useUndo } from '../support/undo.js';
 import { sortItems } from '../support/sorting.js';
 
 // The Files window fills the whole content area, however wide the screen.
@@ -713,61 +714,26 @@ async function confirmCloudCost(action, items, targetVolume = null, targetId = n
 
 // ----- Undo -----
 
-const UNDO_DEPTH = 20;
-const undoSteps = [];
-const undoNotice = ref(null);
 const undoAnchor = ref(0);
-let undoSequence = 0;
+const { notice: undoNotice, offer: offerStep, undoLast } = useUndo({
+    onUndo: async () => {
+        toast.success(t('Undone'));
+        infoVersion.value++;
+        await refresh();
+    },
+    onFailure: (error) => toast.danger(firstError(error, t('Could not undo'))),
+});
 
 function offerUndo(message, undo) {
-    undoSteps.push(undo);
-    undoSteps.splice(0, Math.max(0, undoSteps.length - UNDO_DEPTH));
     undoAnchor.value = (contentPane.value?.offsetLeft ?? 0) + (contentPane.value?.offsetWidth ?? 0) / 2;
-    undoNotice.value = { id: ++undoSequence, message };
+    offerStep(message, undo);
 }
 
-async function undoLast() {
-    const undo = undoSteps.pop();
-    undoNotice.value = null;
-
-    if (!undo) {
-        return;
-    }
-
-    try {
-        await undo();
-        toast.success(t('Undone'));
-    } catch (error) {
-        toast.danger(firstError(error, t('Could not undo')));
-    }
-
-    infoVersion.value++;
-    await refresh();
-}
-
-function placeName(folderId, volume) {
-    return folderId ? (allFolders.value.find((folder) => folder.id === folderId)?.name ?? '…') : volumeName(volume);
-}
-
+const placeName = (folderId, volume) => (folderId ? (allFolders.value.find((folder) => folder.id === folderId)?.name ?? '…') : volumeName(volume));
 const countLabel = (items) => (items.length === 1 ? (items[0].name ?? t('1 item')) : t(':count items', { count: items.length }));
 
-async function moveBack(origins) {
-    const groups = new Map();
-
-    origins.forEach(({ type, id, volume, folderId }) => {
-        const key = `${volume}:${folderId ?? ''}`;
-        const group = groups.get(key) ?? { volume, folderId, folders: [], files: [] };
-        group[type === 'folder' ? 'folders' : 'files'].push(id);
-        groups.set(key, group);
-    });
-
-    for (const group of groups.values()) {
-        await sendJson(endpoints.itemsMove, 'PUT', { folders: group.folders, files: group.files, target_volume: group.volume, target_id: group.folderId });
-    }
-}
-
 function offerMoveUndo(movedItems, origins, targetId, targetVolume) {
-    offerUndo(t(':items moved to :place', { items: countLabel(movedItems), place: placeName(targetId, targetVolume) }), () => moveBack(origins));
+    offerUndo(t(':items moved to :place', { items: countLabel(movedItems), place: placeName(targetId, targetVolume) }), () => moveBack(endpoints.itemsMove, origins));
 }
 
 async function moveTo(movedItems, targetId, targetVolume = volumeOf(targetId)) {
