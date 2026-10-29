@@ -126,7 +126,7 @@ const rowClass = (volume, id) => [
                 <span v-else class="min-w-0 break-words py-1">{{ folder.name }}</span>
             </div>
             <button
-                v-if="volume.canWrite"
+                v-if="volume.canWrite && volume.trashCount > 0"
                 type="button"
                 class="!mt-2 flex min-h-7 w-full cursor-default select-none items-center gap-1.5 rounded-md pr-2 text-left text-sm"
                 :style="{ paddingLeft: '22px' }"

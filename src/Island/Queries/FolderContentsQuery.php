@@ -57,17 +57,24 @@ class FolderContentsQuery
     }
 
     /**
-     * @return list<array{key: string, name: string, folders: list<array{id: int, parentId: ?int, name: string, depth: int}>}>
+     * @return list<array{key: string, name: string, canWrite: bool, trashCount: int, folders: list<array{id: int, parentId: ?int, name: string, depth: int}>}>
      */
     public function tree(Authenticatable $user): array
     {
         return array_values(array_map(fn (Volume $volume): array => [
             ...$volume->toArrayFor($user),
+            'trashCount' => $volume->isWritableBy($user) ? $this->trashCount($volume) : 0,
             'folders' => array_map(
                 fn (array $row): array => ['id' => $row['folder']->id, 'parentId' => $row['folder']->parent_id, 'name' => $row['folder']->name, 'depth' => $row['depth']],
                 $this->tree->flattened($volume->key),
             ),
         ], FileManager::volumesFor($user)));
+    }
+
+    private function trashCount(Volume $volume): int
+    {
+        return Folder::onlyTrashed()->where('volume', $volume->key)->where('trash_root', true)->count()
+            + File::onlyTrashed()->where('volume', $volume->key)->where('trash_root', true)->count();
     }
 
     private const int SNIPPET_BEFORE = 30;

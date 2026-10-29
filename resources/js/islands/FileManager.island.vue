@@ -167,6 +167,10 @@ function ordered(level, filterByName = true) {
     const matches = (item) => !filterByName || !needle || item.name.toLowerCase().includes(needle);
     const { sortBy: column, sortDirection } = view.value;
 
+    if (column !== 'name') {
+        return sortItems([...level.folders, ...level.files].filter(matches), column, sortDirection);
+    }
+
     return [...sortItems(level.folders.filter(matches), column, sortDirection), ...sortItems(level.files.filter(matches), column, sortDirection)];
 }
 
@@ -774,6 +778,15 @@ function dropOnTrash(event, volume) {
 function onTrashRestored() {
     folderCache.clear();
     loadTree();
+}
+
+function onTrashCount(count) {
+    trashCount.value = count;
+    loadTree();
+
+    if (count === 0) {
+        openFolder(null, null, trashVolume.value);
+    }
 }
 
 function downloadZip(zippedItems) {
@@ -1489,7 +1502,7 @@ function onFileChanged(file) {
                         :volume="trashVolume"
                         :endpoints="endpoints"
                         @restored="onTrashRestored"
-                        @count="trashCount = $event"
+                        @count="onTrashCount"
                     />
 
                     <div v-else-if="loading" class="space-y-1 p-3">

@@ -38,6 +38,7 @@ async function load() {
         const { data } = await httpClient.get(props.endpoints.trash, { params: { volume: props.volume } });
         entries.value = data.data.entries;
         retentionDays.value = data.data.retentionDays;
+        emit('count', entries.value.length);
         selected.value = new Set([...selected.value].filter((key) => entries.value.some((entry) => itemKey(entry) === key)));
     } catch {
         failed.value = true;
@@ -50,8 +51,6 @@ watch(() => props.volume, () => {
     selected.value = new Set();
     load();
 }, { immediate: true });
-
-watch(() => entries.value.length, (count) => emit('count', count), { immediate: true });
 
 function onRowClick(event, entry) {
     const key = itemKey(entry);
