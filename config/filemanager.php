@@ -28,7 +28,7 @@ return [
     | and for `write_ability` to be changed — without it the drive is read-only for that user. The package
     | brings a private local disk `filemanager` (storage/app/filemanager) unless the application
     | defines one with that name. Helper data (thumbnails, extracted text) is kept on the same disk
-    | in a hidden `.filemanager` directory at its root.
+    | in a hidden `.laravel-islands-filemanager` directory at its root.
     */
     'volumes' => [
         'files' => ['name' => 'Files', 'disk' => env('FILEMANAGER_DISK', 'filemanager'), 'ability' => null, 'write_ability' => null],

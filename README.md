@@ -100,7 +100,7 @@ Copying and moving between drives can be restricted with `transfer_ability`:
 'transfer_ability' => null,
 ```
 
-Thumbnails and extracted text are kept on the same disk in a hidden `.filemanager` folder. Route
+Thumbnails and extracted text are kept on the same disk in a hidden `.laravel-islands-filemanager` folder. Route
 prefix, middleware, OCR languages and more live in the same config file.
 
 ## License

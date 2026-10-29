@@ -38,7 +38,7 @@ Never copy package code into the app to change it — change the package or its 
 - **The folder tree is virtual.** Folders exist only in the database; each file has its own hashed
   directory, and the stored `path` is authoritative. Never build paths by hand and never move files
   on disk when moving them inside one volume.
-- **Helper data lives in `.filemanager/`** at the root of the volume's disk (thumbnails, extracted
+- **Helper data lives in `.laravel-islands-filemanager/`** at the root of the volume's disk (thumbnails, extracted
   text), written at upload from the uploaded file — no later download is needed, on any disk.
 - **Delete through the package.** Folder deletion must go through `FolderTree::delete()` so stored
   files are removed; deleting rows directly orphans files on disk.

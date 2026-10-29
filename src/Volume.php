@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Storage;
 
 final readonly class Volume
 {
-    public const string HELPER_DIRECTORY = '.filemanager';
+    public const string HELPER_DIRECTORY = '.laravel-islands-filemanager';
 
     public function __construct(
         public string $key,

@@ -374,7 +374,7 @@ test('helper data lives in the hidden folder of the volume and follows a file to
     $this->postJson(route('filemanager.files.store'), ['files' => [UploadedFile::fake()->image('machine.jpg', 800, 600)]])->assertOk();
     $file = File::query()->sole();
 
-    expect($file->thumbnail_path)->toStartWith('.filemanager/thumbnails/');
+    expect($file->thumbnail_path)->toStartWith('.laravel-islands-filemanager/thumbnails/');
     Storage::disk('filemanager')->assertExists([$file->path, $file->thumbnail_path]);
 
     $this->putJson(route('filemanager.items.move'), ['files' => [$file->id], 'target_volume' => 'archive'])->assertOk();
