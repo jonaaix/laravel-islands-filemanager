@@ -65,7 +65,7 @@ class DirectScanner
         $visible = fn (string $path): bool => ! str_starts_with(basename($path), '.');
 
         $diskFolders = array_values(array_filter($disk->directories($directory), $visible));
-        $known = Folder::query()->where('volume', $at->volume->key)->where('parent_id', $at->folderId())->get();
+        $known = Folder::withTrashed()->where('volume', $at->volume->key)->where('parent_id', $at->folderId())->get();
 
         foreach ($known as $folder) {
             if (! in_array($folder->disk_path, $diskFolders, true)) {
@@ -76,7 +76,13 @@ class DirectScanner
         $children = [];
 
         foreach ($diskFolders as $path) {
-            $children[] = $known->firstWhere('disk_path', $path) ?? Folder::query()->create([
+            $matching = $known->where('disk_path', $path);
+
+            if ($matching->isNotEmpty() && $matching->every(fn (Folder $folder): bool => $folder->trashed())) {
+                continue;
+            }
+
+            $children[] = $matching->first(fn (Folder $folder): bool => ! $folder->trashed()) ?? Folder::query()->create([
                 'volume' => $at->volume->key,
                 'parent_id' => $at->folderId(),
                 'name' => basename($path),
@@ -85,12 +91,14 @@ class DirectScanner
         }
 
         $diskFiles = array_values(array_filter($disk->files($directory), $visible));
-        $files = File::query()->where('volume', $at->volume->key)->where('folder_id', $at->folderId())->get();
+        $files = File::withTrashed()->where('volume', $at->volume->key)->where('folder_id', $at->folderId())->get();
         $appeared = array_map(
             fn (string $path): array => ['at' => $at, 'path' => $path],
             array_values(array_diff($diskFiles, $files->pluck('path')->all())),
         );
-        $vanished = $files->reject(fn (File $file): bool => in_array($file->path, $diskFiles, true))->values();
+        $gone = $files->reject(fn (File $file): bool => in_array($file->path, $diskFiles, true));
+        $gone->filter(fn (File $file): bool => $file->trashed())->each(fn (File $file) => $file->forget());
+        $vanished = $gone->reject(fn (File $file): bool => $file->trashed())->values();
 
         return [$appeared, $vanished, $withChildren ? $children : []];
     }
@@ -147,10 +155,8 @@ class DirectScanner
 
     private function forgetFolder(Folder $folder): void
     {
-        $folder->children()->get()->each(fn (Folder $child) => $this->forgetFolder($child));
-        $folder->files()->get()->each(fn (File $file) => $file->forget());
-        Folder::onlyTrashed()->where('parent_id', $folder->id)->update(['parent_id' => null]);
-        File::onlyTrashed()->where('folder_id', $folder->id)->update(['folder_id' => null]);
+        $folder->children()->withTrashed()->get()->each(fn (Folder $child) => $this->forgetFolder($child));
+        $folder->files()->withTrashed()->get()->each(fn (File $file) => $file->forget());
         $folder->forceDelete();
     }
 }

@@ -12,7 +12,6 @@ import ContextMenu from './ContextMenu.vue';
 const props = defineProps({
     volume: { type: String, required: true },
     endpoints: { type: Object, required: true },
-    confirmRestore: { type: Function, required: true },
 });
 
 const emit = defineEmits(['restored', 'count']);
@@ -96,7 +95,7 @@ function openMenu(event, entry, alignRight = false) {
 }
 
 async function restore(items) {
-    if (!items.length || busy.value || !(await props.confirmRestore(items))) {
+    if (!items.length || busy.value) {
         return;
     }
 

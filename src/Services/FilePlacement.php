@@ -21,6 +21,12 @@ class FilePlacement
     {
         $diskPath = $parent->volume->isDirect() ? $this->join($parent->directory(), $name) : null;
 
+        for ($number = 2; $diskPath !== null && $this->isHeldByTrash($parent->volume, $diskPath); $number++) {
+            $diskPath = $this->join($parent->directory(), $name.' '.$number);
+        }
+
+        $name = $diskPath === null ? $name : basename($diskPath);
+
         if ($diskPath !== null) {
             $parent->volume->filesystem()->makeDirectory($diskPath);
         }
@@ -140,11 +146,11 @@ class FilePlacement
     {
         $folder->update(['disk_path' => $newPrefix.substr((string) $folder->disk_path, strlen($oldPrefix))]);
 
-        $folder->files()->get()->each(fn (File $file) => $file->update([
+        $folder->files()->withTrashed()->get()->each(fn (File $file) => $file->update([
             'path' => $newPrefix.substr((string) $file->path, strlen($oldPrefix)),
         ]));
 
-        $folder->children()->get()->each(fn (Folder $child) => $this->rewritePrefix($child, $oldPrefix, $newPrefix));
+        $folder->children()->withTrashed()->get()->each(fn (Folder $child) => $this->rewritePrefix($child, $oldPrefix, $newPrefix));
     }
 
     private function relocateTree(Folder $folder, Volume $volume): void
@@ -197,6 +203,11 @@ class FilePlacement
                 }
             }
         }
+    }
+
+    private function isHeldByTrash(Volume $volume, string $diskPath): bool
+    {
+        return Folder::onlyTrashed()->where('volume', $volume->key)->where('disk_path', $diskPath)->exists();
     }
 
     private function isTaken(Volume $volume, string $path, ?int $exceptFileId): bool

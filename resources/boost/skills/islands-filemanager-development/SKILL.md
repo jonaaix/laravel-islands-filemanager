@@ -51,7 +51,8 @@ Never copy package code into the app to change it — change the package or its 
 - **Delete through the trash.** Folders and files soft-delete into the trash via `Trash::throwAway()`
   (`trash_root` marks the entry, its contents carry `deleted_at` too); `Trash::purge()` removes them for
   good, with their stored files. A plain `delete()` only soft-deletes, `forceDelete()` on rows directly
-  orphans files on disk. On direct volumes trashed items live under `.laravel-islands-filemanager/trash/`.
+  orphans files on disk. On direct volumes trashed items stay in place on the disk; the scanner skips
+  them and new folders never reuse a trashed folder's `disk_path`.
 - **Text extraction is queued.** `ExtractFileTextJob` runs after each upload and needs a worker.
   OCR uses `tesseract` if installed, at most ten pages, so the job stays below a 90 s `retry_after`.
   Backfill with `php artisan filemanager:extract-text` (`--all` re-reads everything).

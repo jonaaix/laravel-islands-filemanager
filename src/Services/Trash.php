@@ -76,7 +76,11 @@ class Trash
 
     public function purge(Folder|File $entry): void
     {
-        DB::transaction(fn () => $entry instanceof Folder ? $this->purgeFolder($entry) : $this->purgeFile($entry));
+        if (! $entry::withTrashed()->whereKey($entry->id)->exists()) {
+            return;
+        }
+
+        DB::transaction(fn () => $entry instanceof Folder ? $this->purgeFolder($entry) : $this->dropFile($entry));
     }
 
     public function empty(Volume $volume): int
@@ -102,14 +106,9 @@ class Trash
 
     private function throwAwayFolder(Folder $folder, Authenticatable $user): void
     {
-        $volume = $folder->volume();
         $memberIds = $this->tree->descendantIds($folder);
-
-        if ($volume->isDirect() && $folder->disk_path !== null) {
-            $this->placement->relocateDirectory($folder, $volume->trashPath('folder-'.$folder->id, $folder->name));
-        }
-
         $trashed = ['deleted_at' => now(), 'trash_root' => false, 'deleted_by_id' => $user->getAuthIdentifier()];
+
         File::query()->whereIn('folder_id', $memberIds)->update($trashed);
         Folder::query()->whereIn('id', $memberIds)->update($trashed);
         Folder::onlyTrashed()->whereKey($folder->id)->update(['trash_root' => true]);
@@ -117,15 +116,6 @@ class Trash
 
     private function throwAwayFile(File $file, Authenticatable $user): void
     {
-        $volume = $file->volume();
-
-        if ($volume->isDirect() && $file->path !== null && $volume->filesystem()->exists($file->path)) {
-            $trashPath = $volume->trashPath('file-'.$file->id, $file->name);
-            $volume->filesystem()->move($file->path, $trashPath);
-            $file->update(['path' => $trashPath]);
-            $this->fingerprints->refresh($file);
-        }
-
         $file->forceFill(['trash_root' => true, 'deleted_by_id' => $user->getAuthIdentifier()])->save();
         $file->delete();
     }
@@ -137,8 +127,9 @@ class Trash
         $volume = $folder->volume();
         $memberIds = $this->members($folder);
         $parent = $this->activeFolder($volume, $folder->parent_id);
+        $staysInPlace = $parent?->id === $folder->parent_id;
         $at = new Location($volume, $parent);
-        $name = $this->freeFolderName($folder->name, $at);
+        $name = $staysInPlace && $volume->isDirect() ? $folder->name : $this->freeFolderName($folder->name, $at);
 
         $restored = ['deleted_at' => null, 'trash_root' => false, 'deleted_by_id' => null];
         Folder::onlyTrashed()->whereIn('id', $memberIds)->update($restored);
@@ -146,10 +137,8 @@ class Trash
 
         $folder->refresh()->update(['parent_id' => $parent?->id, 'name' => $name]);
 
-        if ($volume->isDirect() && $folder->disk_path !== null) {
-            $trashPath = $folder->disk_path;
+        if ($volume->isDirect() && ! $staysInPlace && $folder->disk_path !== null) {
             $this->placement->relocateDirectory($folder, $this->placement->join($at->directory(), $name));
-            $this->deleteEntryDirectory($volume, $trashPath);
         }
     }
 
@@ -158,12 +147,11 @@ class Trash
         $volume = $file->volume();
         $folder = $this->activeFolder($volume, $file->folder_id);
         $attributes = ['folder_id' => $folder?->id, 'trash_root' => false, 'deleted_by_id' => null];
+        $staysInPlace = $folder?->id === $file->folder_id;
 
-        if ($volume->isDirect() && $file->path !== null && $volume->isInTrash($file->path) && $volume->filesystem()->exists($file->path)) {
-            $trashPath = $file->path;
+        if ($volume->isDirect() && ! $staysInPlace && $file->path !== null && $volume->filesystem()->exists($file->path)) {
             $path = $this->placement->freeFilePath(new Location($volume, $folder), $file->name, $file->id);
-            $volume->filesystem()->move($trashPath, $path);
-            $this->deleteEntryDirectory($volume, $trashPath);
+            $volume->filesystem()->move($file->path, $path);
             $attributes += ['path' => $path, 'name' => basename($path)];
         }
 
@@ -177,27 +165,37 @@ class Trash
     private function purgeFolder(Folder $folder): void
     {
         $volume = $folder->volume();
-        $memberIds = $this->members($folder);
+        $ids = $this->subtree($folder);
+        $directories = Folder::withTrashed()->whereIn('id', $ids)->pluck('disk_path', 'id');
 
-        // Items thrown away on their own before the folder are separate entries and stay in the trash.
-        Folder::onlyTrashed()->whereIn('parent_id', $memberIds)->where('trash_root', true)->whereKeyNot($folder->id)->update(['parent_id' => null]);
-        File::onlyTrashed()->whereIn('folder_id', $memberIds)->where('trash_root', true)->update(['folder_id' => null]);
+        File::withTrashed()->whereIn('folder_id', $ids)->get()->each(fn (File $file) => $this->dropFile($file));
 
-        File::onlyTrashed()->whereIn('folder_id', $memberIds)->get()->each(fn (File $file) => $volume->isDirect() ? $file->forget() : $file->forceDelete());
-        foreach (array_reverse($memberIds) as $memberId) {
-            Folder::withTrashed()->whereKey($memberId)->forceDelete();
+        foreach (array_reverse($ids) as $id) {
+            Folder::withTrashed()->whereKey($id)->forceDelete();
+
+            if ($volume->isDirect() && filled($directories[$id] ?? null)) {
+                $this->deleteDirectoryIfUnused($volume, $directories[$id]);
+            }
         }
-
-        $this->deleteEntryDirectory($volume, $folder->disk_path);
     }
 
-    private function purgeFile(File $file): void
+    private function dropFile(File $file): void
     {
         $volume = $file->volume();
+        $sharesPath = $volume->isDirect() && File::query()->where('volume', $volume->key)->where('path', $file->path)->whereKeyNot($file->id)->exists();
 
-        // A record whose file had already vanished still points at its old place, which may hold another file by now.
-        $volume->isDirect() && ($file->path === null || ! $volume->isInTrash($file->path)) ? $file->forget() : $file->forceDelete();
-        $this->deleteEntryDirectory($volume, $file->path);
+        $sharesPath ? $file->forget() : $file->forceDelete();
+    }
+
+    private function deleteDirectoryIfUnused(Volume $volume, string $directory): void
+    {
+        $disk = $volume->filesystem();
+        $visibleFiles = array_filter($disk->allFiles($directory), fn (string $path): bool => ! str_contains('/'.$path, '/.'));
+
+        // Files added from outside after the folder was thrown away were never part of it.
+        if ($visibleFiles === [] && ! Folder::query()->where('volume', $volume->key)->where('disk_path', $directory)->exists()) {
+            $disk->deleteDirectory($directory);
+        }
     }
 
     // ----- Support -----
@@ -212,6 +210,22 @@ class Trash
 
         while ($level !== []) {
             $level = Folder::onlyTrashed()->whereIn('parent_id', $level)->where('trash_root', false)->pluck('id')->all();
+            $ids = [...$ids, ...$level];
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function subtree(Folder $root): array
+    {
+        $ids = [$root->id];
+        $level = [$root->id];
+
+        while ($level !== []) {
+            $level = Folder::withTrashed()->whereIn('parent_id', $level)->pluck('id')->all();
             $ids = [...$ids, ...$level];
         }
 
@@ -234,13 +248,6 @@ class Trash
         }
 
         return $name;
-    }
-
-    private function deleteEntryDirectory(Volume $volume, ?string $path): void
-    {
-        if ($path !== null && $volume->isInTrash($path)) {
-            $volume->filesystem()->deleteDirectory(dirname($path));
-        }
     }
 
     public static function retentionDays(): ?int

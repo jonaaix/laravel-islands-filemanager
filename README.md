@@ -109,8 +109,7 @@ comments, recognised by inode or ETag.
 Deleted items go to a trash per drive and are deleted for good after `trash_days` (30, `null` keeps
 them until emptied by hand) by the scheduled `filemanager:purge-trash`.
 
-Thumbnails, extracted text and the trash of `direct` drives are kept on the same disk in a hidden
-`.laravel-islands-filemanager` folder. Route prefix, middleware, OCR languages and more live in the same config file.
+Thumbnails and extracted text are kept on the same disk in a hidden `.laravel-islands-filemanager` folder. Route prefix, middleware, OCR languages and more live in the same config file.
 
 ## License
 

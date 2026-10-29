@@ -491,6 +491,7 @@ test('a direct volume shows the real folder structure below its root and writes 
     expect($offer->refresh()->path)->toBe('Projects/Kunde A/Angebot.pdf');
 
     $this->deleteJson(route('filemanager.items.destroy'), ['files' => [$offer->id]])->assertOk();
+    $this->deleteJson(route('filemanager.trash.purge'), ['volume' => 'shared', 'files' => [$offer->id]])->assertOk();
     $disk->assertMissing('Projects/Kunde A/Angebot.pdf');
     $disk->assertExists(['Projects/Kunde A/offer 2.pdf', 'Elsewhere/secret.pdf']);
 });
@@ -558,7 +559,7 @@ test('renaming or moving a real folder takes along files the file manager has no
     $this->postJson(route('filemanager.folders.store'), ['volume' => 'shared', 'name' => 'Taken'])->assertJsonValidationErrors('name');
 });
 
-test('on a direct volume the trash keeps items in a hidden folder and puts them back where they were', function () {
+test('on a direct volume the trash only marks items, which stay in place until deleted for good', function () {
     $this->actingAs($this->member());
     $disk = Storage::disk('shared');
     $disk->put('Projects/Customer A/offer.pdf', 'offer');
@@ -571,26 +572,29 @@ test('on a direct volume the trash keeps items in a hidden folder and puts them 
     $notes->update(['notes' => 'Keep']);
 
     $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$customer->id], 'files' => [$notes->id]])->assertOk();
-    $disk->assertMissing(['Projects/Customer A', 'Projects/notes.txt']);
-    expect($disk->allFiles('Projects/.laravel-islands-filemanager/trash'))->toHaveCount(3);
-
     $this->artisan('filemanager:scan', ['volume' => 'shared'])->assertSuccessful();
-    expect(File::onlyTrashed()->count())->toBe(3);
 
-    $disk->put('Projects/notes.txt', 'a new file with the same name');
-    $this->postJson(route('filemanager.trash.restore'), ['folders' => [$customer->id], 'files' => [$notes->id]])->assertOk();
+    $disk->assertExists(['Projects/Customer A/offer.pdf', 'Projects/Customer A/Drafts/draft.pdf', 'Projects/notes.txt']);
+    $this->getJson(route('filemanager.contents', ['volume' => 'shared']))->assertJsonCount(0, 'data.folders')->assertJsonCount(0, 'data.files');
+    expect(File::onlyTrashed()->count())->toBe(3)
+        ->and(Folder::query()->where('volume', 'shared')->count())->toBe(0);
 
-    $disk->assertExists(['Projects/Customer A/offer.pdf', 'Projects/Customer A/Drafts/draft.pdf', 'Projects/notes 2.txt', 'Projects/notes.txt']);
-    expect($disk->allFiles('Projects/.laravel-islands-filemanager/trash'))->toBe([])
-        ->and($notes->refresh()->notes)->toBe('Keep')
-        ->and($notes->path)->toBe('Projects/notes 2.txt');
+    $this->postJson(route('filemanager.files.store'), ['volume' => 'shared', 'files' => [UploadedFile::fake()->createWithContent('notes.txt', 'new notes')]])->assertOk();
+    $this->postJson(route('filemanager.folders.store'), ['volume' => 'shared', 'name' => 'Customer A'])->assertJsonValidationErrors('name');
+    $disk->assertExists('Projects/notes 2.txt');
+
+    $this->postJson(route('filemanager.trash.restore'), ['volume' => 'shared', 'folders' => [$customer->id], 'files' => [$notes->id]])->assertOk();
+    expect($notes->refresh()->path)->toBe('Projects/notes.txt')
+        ->and($notes->notes)->toBe('Keep')
+        ->and(File::query()->where('volume', 'shared')->count())->toBe(4);
 
     $this->deleteJson(route('filemanager.items.destroy'), ['folders' => [$customer->id]])->assertOk();
-    $this->deleteJson(route('filemanager.trash.purge'), ['folders' => [$customer->id]])->assertOk();
+    $disk->put('Projects/Customer A/added outside.pdf', 'outside');
+    $this->deleteJson(route('filemanager.trash.purge'), ['volume' => 'shared', 'folders' => [$customer->id]])->assertOk();
 
-    expect($disk->allFiles('Projects/.laravel-islands-filemanager/trash'))->toBe([])
-        ->and(Folder::withTrashed()->whereKey($customer->id)->exists())->toBeFalse();
-    $disk->assertExists(['Projects/notes.txt', 'Projects/notes 2.txt']);
+    $disk->assertMissing(['Projects/Customer A/offer.pdf', 'Projects/Customer A/Drafts']);
+    $disk->assertExists(['Projects/Customer A/added outside.pdf', 'Projects/notes.txt', 'Projects/notes 2.txt']);
+    expect(Folder::withTrashed()->whereKey($customer->id)->exists())->toBeFalse();
 });
 
 test('the trash is only open to writers and forgets items after the configured days', function () {

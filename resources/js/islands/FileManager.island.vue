@@ -731,7 +731,7 @@ async function submitMove({ volume, folderId }) {
 }
 
 async function remove(removedItems) {
-    if (!removedItems.length || !(await confirmCloudCost('trash', removedItems))) {
+    if (!removedItems.length) {
         return;
     }
 
@@ -1474,7 +1474,6 @@ function onFileChanged(file) {
                         v-if="trashVolume"
                         :volume="trashVolume"
                         :endpoints="endpoints"
-                        :confirm-restore="(restored) => confirmCloudCost('restore', restored)"
                         @restored="onTrashRestored"
                         @count="trashCount = $event"
                     />

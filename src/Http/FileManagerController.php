@@ -169,14 +169,14 @@ class FileManagerController extends Controller
     public function estimate(Request $request, FolderTree $tree): JsonResponse
     {
         $user = $this->authorizeAccess($request);
-        $validated = $request->validate(['action' => ['required', Rule::in(['move', 'copy', 'rename', 'trash', 'restore'])]]);
-        [$folders, $files] = $this->selectedItems($request, $user, trashed: $validated['action'] === 'restore');
-        $target = in_array($validated['action'], ['move', 'copy'], true) ? $this->location($request, $user, 'target_volume', 'target_id') : null;
+        $validated = $request->validate(['action' => ['required', Rule::in(['move', 'copy', 'rename'])]]);
+        [$folders, $files] = $this->selectedItems($request, $user);
+        $target = $validated['action'] === 'rename' ? null : $this->location($request, $user, 'target_volume', 'target_id');
 
         $copiesBytes = fn (Volume $source): bool => match ($validated['action']) {
             'copy' => true,
             'move' => $target->volume->key !== $source->key || $source->isDirect(),
-            'rename', 'trash', 'restore' => $source->isDirect(),
+            'rename' => $source->isDirect(),
         };
 
         $count = 0;
